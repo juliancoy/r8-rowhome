@@ -1,0 +1,25 @@
+{
+  "name": "Baltimore R-8 Rowhome Initial Constraint Set",
+  "status": "initial-source-traced-assumptions",
+  "sources": [
+    "sources/code-article-32-section-9-204-r8-rowhouse-residential.html",
+    "sources/code-article-32-title-9-residential-districts-full.html",
+    "sources/code-building-codes-part-x-international-residential-code-full.html",
+    "sources/code-building-codes-part-iii-national-electrical-code-full.html",
+    "sources/code-article-7-natural-resources-full.html"
+  ],
+  "defaults": {
+    "lotWidthFt": 18,
+    "lotDepthFt": 90,
+    "buildingWidthFt": 18,
+    "buildingDepthFt": 48,
+    "stories": 3,
+    "storyHeightFt": 10,
+    "gasFitted": false
+  },
+  "notes": [
+    "This file is an implementation seed. Detailed rule extraction must remain source-traced.",
+    "Generated output is for visualization and fabrication experiments, not construction authorization."
+  ]
+}
+

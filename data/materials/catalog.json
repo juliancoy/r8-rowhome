@@ -1,0 +1,13 @@
+{
+  "materials": [
+    {"id": "masonry", "unit": "sf", "defaultUnitCostUsd": 42},
+    {"id": "brick veneer and masonry", "unit": "sf", "defaultUnitCostUsd": 55},
+    {"id": "engineered wood framing", "unit": "sf", "defaultUnitCostUsd": 38},
+    {"id": "concrete", "unit": "cy", "defaultUnitCostUsd": 210},
+    {"id": "panelboard", "unit": "each", "defaultUnitCostUsd": 2600},
+    {"id": "120 V receptacle", "unit": "each", "defaultUnitCostUsd": 95},
+    {"id": "240 V receptacle", "unit": "each", "defaultUnitCostUsd": 450},
+    {"id": "urban tree", "unit": "each", "defaultUnitCostUsd": 650}
+  ]
+}
+
