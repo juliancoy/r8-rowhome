@@ -1,0 +1,26 @@
+{
+  "name": "r8-rowhome",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate:documents": "node scripts/generate-documents-index.mjs",
+    "predev": "npm run generate:documents",
+    "dev": "vite --host 0.0.0.0",
+    "prebuild": "npm run generate:documents",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "pretest": "npm run generate:documents",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.184.1",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
+  }
+}

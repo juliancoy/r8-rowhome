@@ -1,14 +1,13 @@
 # Web Viewer
 
-The web viewer is in `web/` and loads `web/sample-model.json`.
+The web viewer is a Vite app rooted at `index.html` and `src/main.ts`.
 
-It uses WebGPU when available. The first implementation provides a simple render path, object metadata panels, validation messages, bill of materials, and keyboard/mouse camera controls.
+It uses Three.js with WebGPU when available and WebGL fallback otherwise. The current implementation provides a generated rowhome scene, orbit controls, selectable components, source metadata panels, validation messages, bill of materials, rough cost rollup, metadata JSON export, and STL export.
 
 Run locally:
 
 ```sh
-python3 -m http.server 8080
+npm run dev
 ```
 
-Open `http://localhost:8080/web/`.
-
+Open the Vite URL printed by the dev server.

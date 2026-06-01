@@ -7,10 +7,12 @@ Initial checks:
 - Building width must not exceed configured lot width.
 - Building depth must not exceed configured lot depth.
 - Generated models always include a professional-review warning.
+- Gas-fitted components are reported as errors because the mission requires all-electric homes.
 
-Use strict mode to make validation errors affect the CLI exit code:
+Run tests:
 
 ```sh
-./build/r8-rowhome --strict
+npm test
 ```
 
+Future work should add strict-mode validation for source-derived constraints as the constraint model matures.

@@ -1,37 +1,35 @@
 # R8 Rowhome
 
-Procedural Baltimore R-8 rowhome model generator.
+Browser-first procedural Baltimore R-8 rowhome model generator.
 
-This project generates a code-informed rowhome visualization model from C++ geometry generators. It exports render JSON for the browser viewer and STL files for component-level inspection or 3D printing experiments.
+The app uses TypeScript, Vite, Three.js, and a WebGPU-first renderer with WebGL fallback. It generates a source-traced conceptual rowhome model, exposes bill-of-materials and validation metadata, and exports selected components to STL.
 
 The output is not a permit set, construction document, or substitute for review by licensed Maryland professionals.
 
-## Build
+## Install
 
 ```sh
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build --output-on-failure
+npm install
 ```
 
-## Generate Model
+## Develop
 
 ```sh
-./build/r8-rowhome --json web/sample-model.json --stl-dir build/stl
+npm run dev
 ```
 
-The command writes:
-
-- `web/sample-model.json`: viewer model
-- `build/stl/*.stl`: one STL per generated component
-
-## View
-
-Serve the repository root with any static file server, then open `web/`.
+## Verify
 
 ```sh
-python3 -m http.server 8080
+npm test
+npm run build
 ```
 
-Then visit `http://localhost:8080/web/`.
+## Current Scope
 
+- Default R-8 rowhome concept generator
+- Three.js component graph with source-traced metadata
+- Validation warnings and basic dimension checks
+- BOM and rough-order cost rollup
+- Component STL export from the browser
+- WebGPU renderer when supported, WebGL fallback otherwise
