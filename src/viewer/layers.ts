@@ -89,7 +89,7 @@ export function componentMatchesViewMode(component: ModelComponent, viewMode: Vi
     return true;
   }
   if (viewMode === "electrical") {
-    return component.metadata.category === "electrical" || /\b(electric|electrical|panelboard|receptacle|copper|awg|nm-b|service mast|weatherhead|outlet)\b/.test(text);
+    return component.metadata.category === "electrical" || /\b(electric|electrical|panelboard|breaker|load center|junction box|device box|switch box|receptacle|copper|awg|nm-b|service mast|weatherhead|meter|disconnect|conduit|raceway|bus bar|outlet)\b/.test(text);
   }
   if (viewMode === "hvac") {
     return /\b(heat pump|air handler|duct|register|exhaust|refrigerant|lineset|ventilation|cooling|heating|condenser)\b/.test(text);

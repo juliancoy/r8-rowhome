@@ -176,5 +176,13 @@ export const sourceDocuments: SourceDocumentEntry[] = [
   {
     "path": "planning-critical-area-management-program-manual-2024.pdf",
     "sizeBytes": 3057609
+  },
+  {
+    "path": "stairs/icc-2021-irc-chapter-3-building-planning.html",
+    "sizeBytes": 79775
+  },
+  {
+    "path": "stairs/icc-irc-spiral-stairways-code-change-re-12-06-16.pdf",
+    "sizeBytes": 66031
   }
 ];

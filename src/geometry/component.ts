@@ -88,9 +88,9 @@ function addProceduralSurfaceShader(material: MeshStandardMaterial | MeshPhysica
        varying vec3 vSurfaceWorldPosition;`
     );
     shader.vertexShader = shader.vertexShader.replace(
-      "#include <worldpos_vertex>",
-      `#include <worldpos_vertex>
-       vSurfaceWorldPosition = worldPosition.xyz;`
+      "#include <begin_vertex>",
+      `#include <begin_vertex>
+       vSurfaceWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <common>",
@@ -179,6 +179,8 @@ export function makeBoxComponent(
   const mesh = new Mesh(geometry, makeMaterial(color, metadata));
   mesh.position.set(center.x, center.z, center.y);
   mesh.rotation.y = rotationYRadians;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   mesh.name = metadata.name;
   mesh.userData = metadata;
   return { metadata, object: mesh, geometry };
@@ -196,8 +198,161 @@ export function makeCylinderComponent(
   geometry.computeVertexNormals();
   const mesh = new Mesh(geometry, makeMaterial(color, metadata));
   mesh.position.set(center.x, center.z, center.y);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   mesh.name = metadata.name;
   mesh.userData = metadata;
+  return { metadata, object: mesh, geometry };
+}
+
+export type DuctAxis = "x" | "y" | "z";
+export type PipeAxis = "x" | "y" | "z";
+
+export function makeHollowRectangularDuctComponent(
+  metadata: ComponentMetadata,
+  color: string,
+  outerWidth: number,
+  outerHeight: number,
+  length: number,
+  wallThickness: number,
+  center: { x: number; y: number; z: number },
+  axis: DuctAxis
+): ModelComponent {
+  const innerWidth = Math.max(outerWidth - wallThickness * 2, wallThickness);
+  const innerHeight = Math.max(outerHeight - wallThickness * 2, wallThickness);
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  function orient(point: [number, number, number]): [number, number, number] {
+    const [x, y, z] = point;
+    if (axis === "x") {
+      return [z, y, x];
+    }
+    if (axis === "z") {
+      return [x, z, y];
+    }
+    return [x, y, z];
+  }
+
+  function addCuboid(cx: number, cy: number, cz: number, width: number, height: number, depth: number): void {
+    const start = positions.length / 3;
+    const x0 = cx - width / 2;
+    const x1 = cx + width / 2;
+    const y0 = cy - height / 2;
+    const y1 = cy + height / 2;
+    const z0 = cz - depth / 2;
+    const z1 = cz + depth / 2;
+    for (const point of [
+      [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+      [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]
+    ] as [number, number, number][]) {
+      positions.push(...orient(point));
+    }
+    indices.push(
+      start, start + 1, start + 2, start, start + 2, start + 3,
+      start + 4, start + 6, start + 5, start + 4, start + 7, start + 6,
+      start, start + 4, start + 5, start, start + 5, start + 1,
+      start + 1, start + 5, start + 6, start + 1, start + 6, start + 2,
+      start + 2, start + 6, start + 7, start + 2, start + 7, start + 3,
+      start + 3, start + 7, start + 4, start + 3, start + 4, start
+    );
+  }
+
+  addCuboid(0, innerHeight / 2 + wallThickness / 2, 0, outerWidth, wallThickness, length);
+  addCuboid(0, -innerHeight / 2 - wallThickness / 2, 0, outerWidth, wallThickness, length);
+  addCuboid(-innerWidth / 2 - wallThickness / 2, 0, 0, wallThickness, innerHeight, length);
+  addCuboid(innerWidth / 2 + wallThickness / 2, 0, 0, wallThickness, innerHeight, length);
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const mesh = new Mesh(geometry, makeMaterial(color, metadata));
+  mesh.position.set(center.x, center.z, center.y);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.name = metadata.name;
+  mesh.userData = metadata;
+  mesh.userData.hvac = {
+    hollow: true,
+    outerWidthFt: outerWidth,
+    outerHeightFt: outerHeight,
+    innerWidthFt: innerWidth,
+    innerHeightFt: innerHeight,
+    lengthFt: length,
+    wallThicknessFt: wallThickness,
+    axis
+  };
+  return { metadata, object: mesh, geometry };
+}
+
+export function makeHollowPipeComponent(
+  metadata: ComponentMetadata,
+  color: string,
+  outerRadius: number,
+  innerRadius: number,
+  length: number,
+  center: { x: number; y: number; z: number },
+  axis: PipeAxis,
+  radialSegments = 18
+): ModelComponent {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const safeInnerRadius = Math.max(0.01, Math.min(innerRadius, outerRadius - 0.01));
+
+  function orient(point: [number, number, number]): [number, number, number] {
+    const [x, y, z] = point;
+    if (axis === "x") {
+      return [y, z, x];
+    }
+    if (axis === "z") {
+      return [x, y, z];
+    }
+    return [x, z, y];
+  }
+
+  for (let i = 0; i < radialSegments; i += 1) {
+    const angle = (i / radialSegments) * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const xOuter = cos * outerRadius;
+    const zOuter = sin * outerRadius;
+    const xInner = cos * safeInnerRadius;
+    const zInner = sin * safeInnerRadius;
+    for (const y of [-length / 2, length / 2]) {
+      positions.push(...orient([xOuter, y, zOuter]));
+      positions.push(...orient([xInner, y, zInner]));
+    }
+  }
+
+  for (let i = 0; i < radialSegments; i += 1) {
+    const next = (i + 1) % radialSegments;
+    const a = i * 4;
+    const b = next * 4;
+    indices.push(a, b, b + 2, a, b + 2, a + 2);
+    indices.push(a + 1, a + 3, b + 3, a + 1, b + 3, b + 1);
+    indices.push(a + 2, b + 2, b + 3, a + 2, b + 3, a + 3);
+    indices.push(a, a + 1, b + 1, a, b + 1, b);
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const mesh = new Mesh(geometry, makeMaterial(color, metadata));
+  mesh.position.set(center.x, center.z, center.y);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.name = metadata.name;
+  mesh.userData = metadata;
+  mesh.userData.plumbing = {
+    hollow: true,
+    outerRadiusFt: outerRadius,
+    innerRadiusFt: safeInnerRadius,
+    innerDiameterFt: safeInnerRadius * 2,
+    lengthFt: length,
+    axis
+  };
   return { metadata, object: mesh, geometry };
 }
 
@@ -245,6 +400,8 @@ export function makeCurvedFacadeComponent(
 
   const mesh = new Mesh(geometry, makeMaterial(color, metadata));
   mesh.position.set(center.x, center.z, center.y);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   mesh.name = metadata.name;
   mesh.userData = metadata;
   return { metadata, object: mesh, geometry };

@@ -9,6 +9,7 @@
     "dev": "vite --host 0.0.0.0",
     "prebuild": "npm run generate:documents",
     "build": "tsc && vite build",
+    "hvac:fem": "node scripts/run-hvac-fem.mjs && vitest run tests/hvac-flow-report.test.ts",
     "preview": "vite preview --host 0.0.0.0",
     "pretest": "npm run generate:documents",
     "test": "vitest run"
@@ -17,6 +18,7 @@
     "three": "^0.184.0"
   },
   "devDependencies": {
+    "@types/node": "^25.9.1",
     "@types/three": "^0.184.1",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "typescript": "^6.0.3",

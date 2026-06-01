@@ -3,12 +3,12 @@ import "./styles.css";
 import {
   BackSide,
   Color,
-  DirectionalLight,
   GridHelper,
   Group,
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
+  PCFSoftShadowMap,
   PerspectiveCamera,
   Raycaster,
   Scene,
@@ -25,6 +25,8 @@ import { exportModelMetadataJson } from "./export/json";
 import { renderPanels, type PanelTab } from "./ui/panels";
 import { createPreferredRenderer } from "./viewer/renderers";
 import { componentMatchesViewMode, type ViewMode } from "./viewer/layers";
+import { createFrontDoorAssembly, isFrontDoorLeafComponent, toggleFrontDoor, type FrontDoorAssembly } from "./viewer/door";
+import { buildHouseLighting } from "./viewer/lighting";
 import type { ModelComponent, RowhomeConfig, RowhomeModel, StairImplementation, ViewOptions } from "./core/types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -72,6 +74,51 @@ const viewOptions: ViewOptions = {
 };
 renderPanels(model, panel, currentConfig, activePanelTab, viewOptions);
 
+const cameraPoseStorageKey = "r8-rowhome.cameraPose.v1";
+
+interface StoredCameraPose {
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+}
+
+function isFiniteTuple(values: unknown, length: number): values is number[] {
+  return Array.isArray(values) && values.length === length && values.every((value) => typeof value === "number" && Number.isFinite(value));
+}
+
+function loadStoredCameraPose(): StoredCameraPose | null {
+  try {
+    const raw = localStorage.getItem(cameraPoseStorageKey);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<StoredCameraPose>;
+    if (!isFiniteTuple(parsed.position, 3) || !isFiniteTuple(parsed.quaternion, 4)) {
+      return null;
+    }
+    return {
+      position: [parsed.position[0], parsed.position[1], parsed.position[2]],
+      quaternion: [parsed.quaternion[0], parsed.quaternion[1], parsed.quaternion[2], parsed.quaternion[3]]
+    };
+  } catch {
+    return null;
+  }
+}
+
+function storedCameraPose(cameraToStore: PerspectiveCamera): StoredCameraPose {
+  return {
+    position: [cameraToStore.position.x, cameraToStore.position.y, cameraToStore.position.z],
+    quaternion: [cameraToStore.quaternion.x, cameraToStore.quaternion.y, cameraToStore.quaternion.z, cameraToStore.quaternion.w]
+  };
+}
+
+function saveStoredCameraPose(cameraToStore: PerspectiveCamera): void {
+  try {
+    localStorage.setItem(cameraPoseStorageKey, JSON.stringify(storedCameraPose(cameraToStore)));
+  } catch {
+    // Storage can be unavailable in private windows or locked-down embeds; camera controls still work.
+  }
+}
+
 const scene = new Scene();
 scene.background = new Color("#8fb9dd");
 const camera = new PerspectiveCamera(55, 1, 0.1, 1000);
@@ -87,14 +134,15 @@ const skyDome = new Mesh(
 );
 scene.add(skyDome);
 
-const ambient = new HemisphereLight("#dcefff", "#4b4b43", 1.65);
-const sun = new DirectionalLight("#fff6e6", 3.1);
-sun.position.set(-30, 80, 40);
-scene.add(ambient, sun);
+const sun = new HemisphereLight("#dcefff", "#161611", 0.42);
+scene.add(sun);
 scene.add(new GridHelper(120, 24, "#53606a", "#2c353c"));
 
 let group: Group = modelGroup(model.components);
+let frontDoorAssembly: FrontDoorAssembly = createFrontDoorAssembly(model.components);
 scene.add(group);
+let houseLights: Group = buildHouseLighting(model);
+scene.add(houseLights);
 
 const raycaster = new Raycaster();
 const pointer = new Vector2();
@@ -168,9 +216,13 @@ function setPanelTab(tab: PanelTab): void {
 function rebuildModel(nextConfig: RowhomeConfig): void {
   currentConfig = { ...nextConfig };
   scene.remove(group);
+  scene.remove(houseLights);
   model = generateRowhome(currentConfig);
   group = modelGroup(model.components);
+  frontDoorAssembly = createFrontDoorAssembly(model.components);
   scene.add(group);
+  houseLights = buildHouseLighting(model);
+  scene.add(houseLights);
   renderPanels(model, panel, currentConfig, activePanelTab, viewOptions);
   setIsolation(isolatedComponentId && model.components.some((component) => component.metadata.id === isolatedComponentId) ? isolatedComponentId : null);
 }
@@ -194,16 +246,41 @@ function lookDirectionFromAngles(): Vector3 {
 async function boot(): Promise<void> {
   const { renderer, mode } = await createPreferredRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(devicePixelRatio);
+  if (renderer.shadowMap) {
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = PCFSoftShadowMap;
+  }
   renderMode.textContent = mode;
 
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(9, 22, 12);
   controls.enableRotate = false;
   controls.enableDamping = true;
   controls.maxDistance = 180;
-  controls.update();
+
+  const savedPose = loadStoredCameraPose();
+  if (savedPose) {
+    camera.position.fromArray(savedPose.position);
+    camera.quaternion.fromArray(savedPose.quaternion);
+  }
   syncLookAnglesFromCamera();
+  controls.target.copy(camera.position.clone().add(lookDirectionFromAngles().multiplyScalar(24)));
+  controls.update();
   let previousFrameMs = performance.now();
+  let lastCameraPoseJson = JSON.stringify(storedCameraPose(camera));
+  let lastCameraPoseSaveMs = 0;
+
+  function persistCameraPose(nowMs: number, force = false): void {
+    const nextCameraPoseJson = JSON.stringify(storedCameraPose(camera));
+    if (nextCameraPoseJson === lastCameraPoseJson) {
+      return;
+    }
+    if (!force && nowMs - lastCameraPoseSaveMs < 500) {
+      return;
+    }
+    lastCameraPoseJson = nextCameraPoseJson;
+    lastCameraPoseSaveMs = nowMs;
+    saveStoredCameraPose(camera);
+  }
 
   function updateCameraLook(): void {
     const forward = lookDirectionFromAngles();
@@ -269,6 +346,7 @@ async function boot(): Promise<void> {
     resize();
     applyFlyMovement(deltaSeconds);
     controls.update();
+    persistCameraPose(nowMs);
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
   }
@@ -304,6 +382,11 @@ async function boot(): Promise<void> {
       return;
     }
     selection.textContent = selected.metadata.name;
+    if (isFrontDoorLeafComponent(selected.metadata.id)) {
+      toggleFrontDoor(frontDoorAssembly);
+      selection.textContent = frontDoorAssembly.isOpen ? "Front door open" : "Front door closed";
+      return;
+    }
     if (selected.metadata.printable) {
       const stl = exportComponentStl(selected);
       console.info(`Prepared STL for ${selected.metadata.id}`, stl.slice(0, 80));
@@ -348,6 +431,7 @@ async function boot(): Promise<void> {
     const pitchLimit = Math.PI / 2 - 0.02;
     pitchRadians = Math.max(-pitchLimit, Math.min(pitchLimit, pitchRadians));
     updateCameraLook();
+    persistCameraPose(performance.now());
   });
 
   canvas.addEventListener("pointerup", (event) => {
@@ -359,6 +443,8 @@ async function boot(): Promise<void> {
     canvas.releasePointerCapture(event.pointerId);
     if (wasClick) {
       selectAt(event.clientX, event.clientY);
+    } else {
+      persistCameraPose(performance.now(), true);
     }
   });
 
@@ -424,7 +510,12 @@ async function boot(): Promise<void> {
       rebuildModel({ ...currentConfig, facadeStyleId: target.value });
     }
     if (target.id === "stair-implementation-select") {
-      rebuildModel({ ...currentConfig, stairImplementation: target.value as StairImplementation });
+      const stairImplementation = target.value as StairImplementation;
+      rebuildModel({
+        ...currentConfig,
+        stairImplementation,
+        facadeStyleId: stairImplementation === "spiral" ? "bowed-front" : currentConfig.facadeStyleId
+      });
     }
     if (target.id === "invert-drag-horizontal") {
       viewOptions.invertDragHorizontal = target.value === "inverted";
@@ -459,6 +550,10 @@ async function boot(): Promise<void> {
 
   exportJsonButton.addEventListener("click", () => {
     downloadTextFile("r8-rowhome-metadata.json", exportModelMetadataJson(model), "application/json");
+  });
+
+  window.addEventListener("beforeunload", () => {
+    saveStoredCameraPose(camera);
   });
 
   animate();

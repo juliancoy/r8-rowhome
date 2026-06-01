@@ -7,5 +7,6 @@ export const sources = {
   completeStreets: "sources/dot-complete-streets-manual-2021-03.pdf",
   biaCurvedBrick: "sources/materials/facade/bia-curved-brick-walls.pdf",
   baltimoreRowhouseAnatomy: "sources/materials/facade/baltimore-heritage-anatomy-of-a-rowhouse.html",
+  spiralStairCode: "sources/stairs/icc-irc-spiral-stairways-code-change-re-12-06-16.pdf",
   plan: "plan.md"
 } as const;

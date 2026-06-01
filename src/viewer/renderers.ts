@@ -6,6 +6,10 @@ export type PreferredRenderer = {
   render: (scene: Scene, camera: Camera) => void | Promise<void>;
   setPixelRatio: (value: number) => void;
   setSize: (width: number, height: number, updateStyle?: boolean) => void;
+  shadowMap?: {
+    enabled: boolean;
+    type: number;
+  };
 };
 
 export async function createPreferredRenderer(parameters: WebGLRendererParameters): Promise<{ renderer: PreferredRenderer; mode: "WebGPU" | "WebGL" }> {

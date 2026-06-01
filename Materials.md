@@ -76,12 +76,13 @@ These choices represent common below-grade residential practice: concrete for ea
 
 - Floor plates: `engineered wood framing`, selected as a schematic modern residential framing system with predictable geometry and cost metadata. Source: residential code baseline.
 - Flat roof deck: modeled with engineered framing plus roof insulation and parapet/coping. Chosen for rowhouse form compatibility. Sources: R-8 context and residential code baseline.
-- Stairs: alternating-run stairs use `wood alternating-run stair tread`, painted risers, wood landings, guard rails, and handrails. The spiral option uses a `steel spiral stair center pole`, `steel and wood spiral stair tread`, and steel landing. Chosen to compare conventional compact rowhouse stair behavior with a compact alternate implementation. Source: residential code baseline. Spiral stair code acceptability must be reviewed for egress role and dimensions.
+- Stairs: alternating-run stairs use `wood alternating-run stair tread`, painted risers, wood landings, guard rails, and handrails. The spiral option uses a `steel spiral stair center pole`, `steel and wood spiral stair tread`, and steel landing located in the front curved facade zone. Chosen to compare conventional compact rowhouse stair behavior with a compact alternate implementation. Sources: residential code baseline and `sources/stairs/icc-irc-spiral-stairways-code-change-re-12-06-16.pdf`. Spiral stair code acceptability must be reviewed for egress role and final dimensions.
 
 ## Windows, Doors, And Openings
 
 - Windows and transoms: `window assembly` and `transom glazing`, modeled with transparent material in the viewer.
 - Entry door: `insulated exterior door`.
+- Rear exits and fire escape: `insulated steel rear egress door`, painted steel frames, metal thresholds, galvanized steel grating platforms, guards, stair treads, stringers, and grade landing. These make the rear means of egress and exterior escape route inspectable in the model; final egress compliance, attachment, guard geometry, corrosion protection, and fire-department requirements need professional review. Source: residential code baseline.
 - Lintels and sills: `stone lintel` and `stone sill`.
 
 These selections reflect typical rowhouse facade composition and make openings visible in the model while preserving source traceability. Sources: residential code baseline and rowhouse anatomy source.
@@ -90,11 +91,13 @@ These selections reflect typical rowhouse facade composition and make openings v
 
 The model follows the mission requirement for an all-electric house with no gas-fitted equipment.
 
-- Branch circuits: `12 AWG copper NM-B cable`.
-- Range circuit: `6 AWG copper range cable` and accessible `240 V receptacle`.
-- Service: `panelboard`, `weatherhead and service mast`, and `copper service conductors`.
-- Heating/cooling: `air-source heat pump condenser`, `electric air handler`, `insulated refrigerant lines and control wire`.
-- Ventilation: `galvanized steel duct`, `galvanized steel return duct`, bathroom exhaust duct, kitchen range hood exhaust duct.
+- Service and distribution: `galvanized service mast with weatherhead`, `ringless meter socket enclosure`, `service-rated emergency disconnect switch`, `copper service entrance conductors in raceway`, and an accessible first-floor `200 A main-breaker load center panelboard` with visible working-clearance marker.
+- Breaker panel internals: plug-on molded-case branch breakers, 2-pole range breaker, tin-plated copper neutral bus bar, and equipment-grounding bus bar.
+- Branch circuits: `12 AWG copper NM-B cable with equipment grounding conductor`, ceiling junction boxes, wall switch boxes, listed device boxes, cable drops, and switched luminaire connections.
+- Range circuit: `6 AWG copper range cable with equipment grounding conductor` and accessible `50 A 240 V range receptacle in listed device box`.
+- Interior lighting: hardwired switched LED ceiling luminaires for room/stair lighting and a portable LED floor lamp in the living room. These are modeled as visible electrical fixtures and as runtime point lights in the viewer.
+- Heating/cooling: `air-source heat pump condenser`, `electric air handler with supply and return plenums`, and `insulated refrigerant lines and control wire`.
+- Ventilation: hollow galvanized steel rectangular supply, return, branch, riser, bathroom exhaust, and kitchen range hood ducts. Each duct is modeled as sheet-metal walls around an interior void and carries flow-node, design-CFM, design-velocity, and hydraulic-area metadata for downstream thermofluid/FEM or CFD preprocessing.
 - Hot water: `electric heat pump water heater`.
 
 These are selected to make the electrical and ventilation systems inspectable in the viewer while staying consistent with the all-electric mission. Sources: `sources/code-building-codes-part-iii-national-electrical-code-full.html` and residential/mechanical code baseline files in `sources/`.
