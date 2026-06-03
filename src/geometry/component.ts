@@ -239,6 +239,22 @@ function scaleBrickTextureToModule(
 }
 
 export function makeMaterial(color: string, metadata?: ComponentMetadata): MeshStandardMaterial | MeshPhysicalMaterial {
+  const text = `${metadata?.material ?? ""} ${metadata?.name ?? ""}`.toLowerCase();
+  if (/\bphotovoltaic|solar module\b/.test(text)) {
+    return new MeshPhysicalMaterial({
+      color: new Color(color),
+      roughness: 0.18,
+      metalness: 0.12,
+      transmission: 0.08,
+      transparent: true,
+      opacity: 0.92,
+      ior: 1.42,
+      thickness: 0.12,
+      emissive: new Color("#163a58"),
+      emissiveIntensity: 0.18
+    });
+  }
+
   const family = classifyMaterial(metadata);
   if (family === "glass") {
     return new MeshPhysicalMaterial({

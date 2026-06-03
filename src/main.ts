@@ -64,6 +64,7 @@ app.innerHTML = `
             <option value="front">Front elevation</option>
             <option value="left">Left elevation</option>
             <option value="right">Right elevation</option>
+            <option value="back">Back elevation</option>
             <option value="interior">Interior perspective</option>
             <option value="review-sheet">Four-view sheet</option>
           </select>
@@ -81,13 +82,13 @@ app.innerHTML = `
           <strong>Front Elevation</strong>
           <span>Street facade and stoop composition</span>
         </section>
-        <section class="review-sheet-cell review-sheet-cell-left">
-          <strong>Left Elevation</strong>
-          <span>Corner-side condition and massing</span>
+        <section class="review-sheet-cell review-sheet-cell-side">
+          <strong>Side Elevation</strong>
+          <span>Party-wall side and depth</span>
         </section>
-        <section class="review-sheet-cell review-sheet-cell-right">
-          <strong>Right Elevation</strong>
-          <span>Opposite side wall and depth</span>
+        <section class="review-sheet-cell review-sheet-cell-back">
+          <strong>Back Elevation</strong>
+          <span>Rear wall and egress condition</span>
         </section>
       </div>
       <aside class="structural-legend" id="structural-legend" aria-label="Structural demand legend" hidden>
@@ -209,7 +210,7 @@ interface StoredCameraPose {
   quaternion: [number, number, number, number];
 }
 
-type CameraPresetId = "top" | "front" | "left" | "right" | "interior";
+type CameraPresetId = "top" | "front" | "left" | "right" | "back" | "interior";
 type InspectionViewId = "model" | "gravity-demand" | CameraPresetId | "review-sheet";
 
 interface CameraPreset {
@@ -221,7 +222,7 @@ interface CameraPreset {
   up?: Vector3;
 }
 
-const reviewSheetPresets: CameraPresetId[] = ["top", "front", "left", "right"];
+const reviewSheetPresets: CameraPresetId[] = ["top", "front", "left", "back"];
 
 function isFiniteTuple(values: unknown, length: number): values is number[] {
   return Array.isArray(values) && values.length === length && values.every((value) => typeof value === "number" && Number.isFinite(value));
@@ -282,9 +283,9 @@ function cameraPreset(id: CameraPresetId, config: RowhomeConfig): CameraPreset {
     return {
       id,
       label: "Top roof and site inspection",
-      position: new Vector3(siteCenterX + 6, roofZ + siteSpan * 1.85, siteCenterY + 10),
-      target: new Vector3(siteCenterX + 6, roofZ + 0.3, siteCenterY + 10),
-      fov: 36,
+      position: new Vector3(siteCenterX + 6, roofZ + siteSpan * 2.15, siteCenterY + 8),
+      target: new Vector3(siteCenterX + 6, roofZ + 0.3, siteCenterY + 8),
+      fov: 42,
       up: new Vector3(0, 0, -1)
     };
   }
@@ -315,6 +316,15 @@ function cameraPreset(id: CameraPresetId, config: RowhomeConfig): CameraPreset {
       fov: 30
     };
   }
+  if (id === "back") {
+    return {
+      id,
+      label: "Back elevation inspection",
+      position: new Vector3(centerX, 15.5, config.buildingDepthFt + 96),
+      target: new Vector3(centerX, 14.4, config.buildingDepthFt - 0.5),
+      fov: 18
+    };
+  }
   return {
     id,
     label: "Interior room inspection",
@@ -338,6 +348,8 @@ function viewLabel(viewId: InspectionViewId): string {
       return "Left elevation";
     case "right":
       return "Right elevation";
+    case "back":
+      return "Back elevation";
     case "interior":
       return "Interior perspective";
     case "review-sheet":
@@ -352,6 +364,7 @@ function viewModeForInspectionView(viewId: InspectionViewId): ViewMode {
     case "interior":
       return "interior";
     case "model":
+    case "top":
       return "all";
     default:
       return "architecture";
@@ -366,6 +379,7 @@ function hashForInspectionView(viewId: InspectionViewId): string {
     case "front":
     case "left":
     case "right":
+    case "back":
     case "interior":
       return `#camera-${viewId}`;
     case "review-sheet":
@@ -637,7 +651,7 @@ async function boot(): Promise<void> {
       setIsolation(null);
     }
     setViewMode(viewModeForInspectionView(viewId));
-    if (viewId === "top" || viewId === "front" || viewId === "left" || viewId === "right" || viewId === "interior") {
+    if (viewId === "top" || viewId === "front" || viewId === "left" || viewId === "right" || viewId === "back" || viewId === "interior") {
       applyCameraPresetPosition(viewId);
     } else {
       setActiveCameraPreset(null);
@@ -668,7 +682,7 @@ async function boot(): Promise<void> {
       return true;
     }
     const presetId = hash.replace("#camera-", "") as CameraPresetId;
-    if (presetId === "top" || presetId === "front" || presetId === "left" || presetId === "right" || presetId === "interior") {
+    if (presetId === "top" || presetId === "front" || presetId === "left" || presetId === "right" || presetId === "back" || presetId === "interior") {
       setInspectionView(presetId, false);
       return true;
     }
@@ -1044,7 +1058,7 @@ async function boot(): Promise<void> {
 
   viewPresetSelect.addEventListener("change", () => {
     const nextView = viewPresetSelect.value as InspectionViewId;
-    if (nextView === "model" || nextView === "gravity-demand" || nextView === "top" || nextView === "front" || nextView === "left" || nextView === "right" || nextView === "interior" || nextView === "review-sheet") {
+    if (nextView === "model" || nextView === "gravity-demand" || nextView === "top" || nextView === "front" || nextView === "left" || nextView === "right" || nextView === "back" || nextView === "interior" || nextView === "review-sheet") {
       setInspectionView(nextView);
     }
   });

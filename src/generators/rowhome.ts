@@ -45,12 +45,19 @@ function isUnitComponentReplacedByRowAssembly(component: ModelComponent): boolea
     "front-sidewalk",
     "front-curb",
     "front-roadway",
+    "side-roadway",
+    "side-sidewalk",
     "front-crosswalk-stripe-1",
     "front-crosswalk-stripe-2",
     "front-crosswalk-stripe-3",
     "front-crosswalk-stripe-4",
     "front-crosswalk-stripe-5",
     "front-crosswalk-stripe-6",
+    "side-crosswalk-stripe-1",
+    "side-crosswalk-stripe-2",
+    "side-crosswalk-stripe-3",
+    "side-crosswalk-stripe-4",
+    "side-crosswalk-stripe-5",
     "rear-yard",
     "brick-takeoff-summary",
     "party-wall-left",
@@ -63,19 +70,27 @@ function isUnitComponentReplacedByRowAssembly(component: ModelComponent): boolea
 }
 
 function addStreetFrontage(components: ModelComponent[], rowWidth: number): void {
+  const frontLotLineY = -5.0;
+  const privateForecourtDepthFt = 5.0;
   const sidewalkDepth = 14.0;
-  const sidewalkCenterY = -12.0;
+  const sidewalkCenterY = frontLotLineY - sidewalkDepth / 2;
   const curbCenterY = -19.2;
-  const roadwayCenterY = -30.5;
   const roadwayDepth = 30.0;
+  const roadwayFrontEdgeY = curbCenterY - 0.4;
+  const roadwayCenterY = roadwayFrontEdgeY - roadwayDepth / 2;
   const sideStreetCenterX = -20.0;
   const sideStreetWidth = 24.0;
   const sideStreetDepth = 120.0;
   const cornerCrosswalkCenterX = 1.8;
+  const frontRoadCenterlineY = roadwayCenterY;
+  const sideRoadCenterlineX = sideStreetCenterX;
 
   box(
     components,
-    metadata("front-sidewalk", "Front public sidewalk", "site", "cast-in-place concrete sidewalk", sources.completeStreets, 5400, false),
+    metadata("front-sidewalk", "Front public sidewalk", "site", "cast-in-place concrete sidewalk", sources.completeStreets, 5400, false, [
+      `Sidewalk terminates at the front lot line so the private front plot begins at y=${frontLotLineY.toFixed(1)} ft.`,
+      `Frontage preserves an approximately ${privateForecourtDepthFt.toFixed(0)} ft private forecourt consistent with the R-8 character statement of rowhouses built to or only modestly set back from the street.`
+    ]),
     "#b7b5af",
     rowWidth + 10,
     sidewalkDepth,
@@ -102,6 +117,17 @@ function addStreetFrontage(components: ModelComponent[], rowWidth: number): void
     0.18,
     { x: rowWidth / 2, y: roadwayCenterY, z: 0.01 }
   );
+  for (const [index, offset] of [-0.32, 0.32].entries()) {
+    box(
+      components,
+      metadata(`front-road-centerline-${index + 1}`, `Front road double-yellow line ${index + 1}`, "site", "thermoplastic double-yellow centerline marking", sources.completeStreets, index === 0 ? 420 : 0, false),
+      "#d8b72c",
+      rowWidth + 36,
+      0.14,
+      0.03,
+      { x: rowWidth / 2, y: frontRoadCenterlineY + offset, z: 0.12 }
+    );
+  }
   box(
     components,
     metadata("side-roadway", "Corner side street roadway", "site", "asphalt street pavement", sources.completeStreets, 0, false, [
@@ -113,6 +139,17 @@ function addStreetFrontage(components: ModelComponent[], rowWidth: number): void
     0.18,
     { x: sideStreetCenterX, y: 14.0, z: 0.01 }
   );
+  for (const [index, offset] of [-0.32, 0.32].entries()) {
+    box(
+      components,
+      metadata(`side-road-centerline-${index + 1}`, `Side road double-yellow line ${index + 1}`, "site", "thermoplastic double-yellow centerline marking", sources.completeStreets, index === 0 ? 420 : 0, false),
+      "#d8b72c",
+      0.14,
+      sideStreetDepth - 8,
+      0.03,
+      { x: sideRoadCenterlineX + offset, y: 14.0, z: 0.12 }
+    );
+  }
   box(
     components,
     metadata("side-sidewalk", "Corner side street sidewalk", "site", "cast-in-place concrete sidewalk", sources.completeStreets, 3600, false),
@@ -144,6 +181,57 @@ function addStreetFrontage(components: ModelComponent[], rowWidth: number): void
       2.2,
       0.03,
       { x: cornerCrosswalkCenterX - stripe * 2.0, y: sidewalkCenterY, z: 0.12 }
+    );
+  }
+
+  const stopSignLocations = [
+    { id: "side-north", x: -8.8, y: sidewalkCenterY + 10.5 },
+    { id: "side-south", x: -8.8, y: sidewalkCenterY - 9.5 }
+  ];
+  for (const sign of stopSignLocations) {
+    components.push(makeCylinderComponent(
+      metadata(`stop-sign-post-${sign.id}`, `Stop sign post ${sign.id}`, "site", "galvanized steel sign post", sources.completeStreets, 120, false),
+      "#8c9094",
+      0.08,
+      8.0,
+      { x: sign.x, y: sign.y, z: 4.0 }
+    ));
+    const signFace = makeCylinderComponent(
+      metadata(`stop-sign-face-${sign.id}`, `Stop sign ${sign.id}`, "site", "retroreflective octagonal stop sign", sources.completeStreets, 180, false, [
+        "Conceptual side-street stop control for the modeled corner intersection."
+      ]),
+      "#b7221f",
+      0.95,
+      0.08,
+      { x: sign.x, y: sign.y, z: 7.1 },
+      8
+    );
+    signFace.object.rotation.x = Math.PI / 2;
+    components.push(signFace);
+  }
+
+  const streetLightLocations = [
+    { id: "corner-nw", x: -8.6, y: curbCenterY + 1.1 },
+    { id: "corner-se", x: 2.0, y: sidewalkCenterY + 1.4 }
+  ];
+  for (const light of streetLightLocations) {
+    components.push(makeCylinderComponent(
+      metadata(`street-light-post-${light.id}`, `Street light pole ${light.id}`, "site", "painted steel street light pole", sources.completeStreets, 1400, false),
+      "#74797d",
+      0.14,
+      14.0,
+      { x: light.x, y: light.y, z: 7.0 }
+    ));
+    box(
+      components,
+      metadata(`street-light-head-${light.id}`, `Street light luminaire ${light.id}`, "site", "LED cobra-head street light luminaire", sources.completeStreets, 950, false, [
+        "Conceptual corner street lighting for the modeled intersection."
+      ]),
+      "#1d2124",
+      1.2,
+      0.4,
+      0.5,
+      { x: light.x + 0.6, y: light.y + 0.2, z: 13.3 }
     );
   }
 }

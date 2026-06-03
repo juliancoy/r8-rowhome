@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-03T00:54:30.003Z",
+  "generatedAt": "2026-06-03T01:30:42.171Z",
   "purpose": "Headless CI plumbing fluid-analysis preflight report. The website renderer does not run this workflow.",
   "edgeCount": 39,
   "systems": [

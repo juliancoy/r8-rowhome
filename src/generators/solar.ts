@@ -38,7 +38,7 @@ export function addRoofSolarArray(
           true,
           notes
         ),
-        "#9aa7b3",
+        "#d1dbe5",
         panelWidth + 0.18,
         panelDepth + 0.18,
         0.08,
@@ -56,7 +56,7 @@ export function addRoofSolarArray(
           true,
           notes
         ),
-        "#2c5f8a",
+        "#4c95cf",
         panelWidth,
         panelDepth,
         panelThickness,

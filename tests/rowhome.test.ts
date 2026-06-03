@@ -29,6 +29,10 @@ describe("rowhome generator", () => {
     expect(model.components.some((component) => component.metadata.id === "front-roadway")).toBe(true);
     expect(model.components.some((component) => component.metadata.id === "side-roadway")).toBe(true);
     expect(model.components.some((component) => component.metadata.id === "side-sidewalk")).toBe(true);
+    expect(model.components.filter((component) => component.metadata.id.startsWith("front-road-centerline-")).length).toBe(2);
+    expect(model.components.filter((component) => component.metadata.id.startsWith("side-road-centerline-")).length).toBe(2);
+    expect(model.components.filter((component) => component.metadata.id.startsWith("stop-sign-face-")).length).toBe(2);
+    expect(model.components.filter((component) => component.metadata.id.startsWith("street-light-head-")).length).toBe(2);
     expect(model.components.filter((component) => component.metadata.id.startsWith("front-crosswalk-stripe-")).length).toBe(6);
     expect(model.components.filter((component) => component.metadata.id.startsWith("side-crosswalk-stripe-")).length).toBe(5);
   });
@@ -43,12 +47,24 @@ describe("rowhome generator", () => {
     expect(sideSidewalk).toBeDefined();
     expect(leftPartyWall).toBeDefined();
 
-    const frontSidewalkBounds = new Box3().setFromObject(frontSidewalk!.object);
     const sideSidewalkBounds = new Box3().setFromObject(sideSidewalk!.object);
     const leftPartyWallBounds = new Box3().setFromObject(leftPartyWall!.object);
 
-    expect(frontSidewalkBounds.max.z).toBeCloseTo(-11, 3);
+    expect(frontSidewalk!.object.position.z + 7).toBeCloseTo(-5, 3);
     expect(sideSidewalkBounds.max.x).toBeLessThanOrEqual(leftPartyWallBounds.min.x + 0.01);
+  });
+
+  it("uses one continuous global street frontage for a multi-home row", () => {
+    const model = generateRowhome({ ...defaultRowhomeConfig, rowhomeCount: 3 });
+    const ids = model.components.map((component) => component.metadata.id);
+
+    expect(ids.filter((id) => id === "front-sidewalk")).toHaveLength(1);
+    expect(ids.filter((id) => id === "front-roadway")).toHaveLength(1);
+    expect(ids.filter((id) => id === "side-roadway")).toHaveLength(1);
+    expect(ids.filter((id) => id === "side-sidewalk")).toHaveLength(1);
+    expect(ids.filter((id) => id.startsWith("unit-") && id.includes("front-sidewalk"))).toHaveLength(0);
+    expect(ids.filter((id) => id.startsWith("unit-") && id.includes("side-roadway"))).toHaveLength(0);
+    expect(ids.filter((id) => id.startsWith("unit-") && id.includes("side-sidewalk"))).toHaveLength(0);
   });
 
   it("contains no gas-fitted components", () => {
