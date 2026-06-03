@@ -338,24 +338,85 @@ export function addInteriorPartitionAssembly(
   config: RowhomeConfig
 ): void {
   const w = config.buildingWidthFt;
-  const z = floor * config.storyHeightFt + 4.2;
+  const partitionHeight = Math.max(0.1, config.storyHeightFt - 0.32);
+  const z = floor * config.storyHeightFt + partitionHeight / 2;
   const doorWidth = 3.0;
   const doorHeight = 7.0;
   const doorCenterX = config.buildingWidthFt / 2 - 1.2;
-  const leftWidth = Math.max(0, doorCenterX - doorWidth / 2 - 0.8);
-  const rightStart = doorCenterX + doorWidth / 2;
-  const rightWidth = Math.max(0, w - 0.8 - rightStart);
+  const partitionXMin = 0.8;
+  const partitionXMax = w - 0.8;
+  const openings = [
+    {
+      id: "stair-opening",
+      left: 0.75,
+      right: 5.45,
+      fullHeight: true,
+      note: "Segmented around the stair hall so stair flights, treads, guards, and handrails do not pass through the partition."
+    },
+    {
+      id: "door-opening",
+      left: doorCenterX - doorWidth / 2,
+      right: doorCenterX + doorWidth / 2,
+      fullHeight: false,
+      note: "Segmented around a room door opening."
+    }
+  ].map((opening) => ({
+    ...opening,
+    left: Math.max(partitionXMin, opening.left),
+    right: Math.min(partitionXMax, opening.right)
+  })).filter((opening) => opening.right > opening.left + 0.01).sort((a, b) => a.left - b.left);
   const notes = [
     "Interior partition modeled as dimensional wood studs with gypsum board each side.",
     "Schematic framing only; structural, acoustic, fire, and MEP penetrations require professional review.",
-    "Segmented with a door opening so rooms remain connected rather than fully blocked off."
+    "Segmented with door and stair-hall openings so rooms remain connected and stairs do not intersect wall geometry."
   ];
 
-  for (const [segmentId, segmentX, segmentWidth, segmentZ, segmentHeight] of [
-    ["left", 0.8 + leftWidth / 2, leftWidth, z, 8.2],
-    ["right", rightStart + rightWidth / 2, rightWidth, z, 8.2],
-    ["header", doorCenterX, doorWidth, floor * config.storyHeightFt + doorHeight + (8.2 - doorHeight) / 2, 8.2 - doorHeight]
-  ] as const) {
+  const segments: Array<{ id: string; x: number; width: number; z: number; height: number; notes: string[] }> = [];
+  let cursor = partitionXMin;
+  let solidIndex = 1;
+  for (const opening of openings) {
+    if (opening.left > cursor + 0.01) {
+      const width = opening.left - cursor;
+      segments.push({
+        id: solidIndex === 1 ? "left" : `solid-${solidIndex}`,
+        x: cursor + width / 2,
+        width,
+        z,
+        height: partitionHeight,
+        notes
+      });
+      solidIndex += 1;
+    }
+    if (!opening.fullHeight) {
+      segments.push({
+        id: "header",
+        x: (opening.left + opening.right) / 2,
+        width: opening.right - opening.left,
+        z: floor * config.storyHeightFt + doorHeight + (partitionHeight - doorHeight) / 2,
+        height: partitionHeight - doorHeight,
+        notes: [...notes, opening.note]
+      });
+    }
+    cursor = Math.max(cursor, opening.right);
+  }
+  if (cursor < partitionXMax - 0.01) {
+    const width = partitionXMax - cursor;
+    segments.push({
+      id: "right",
+      x: cursor + width / 2,
+      width,
+      z,
+      height: partitionHeight,
+      notes
+    });
+  }
+
+  for (const segment of segments) {
+    const segmentId = segment.id;
+    const segmentX = segment.x;
+    const segmentWidth = segment.width;
+    const segmentZ = segment.z;
+    const segmentHeight = segment.height;
     if (segmentWidth <= 0.01 || segmentHeight <= 0.01) continue;
     box(
       components,
@@ -367,7 +428,7 @@ export function addInteriorPartitionAssembly(
         sources.residentialCode,
         segmentId === "left" ? 1100 : 0,
         true,
-        notes
+        segment.notes
       ),
       "#c49a67",
       segmentWidth,
@@ -386,7 +447,7 @@ export function addInteriorPartitionAssembly(
           sources.residentialCode,
           segmentId === "left" && face === "front" ? 420 : 0,
           true,
-          notes
+          segment.notes
         ),
       "#e6dfcf",
         segmentWidth,

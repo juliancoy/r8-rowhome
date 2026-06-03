@@ -1,6 +1,7 @@
 import type { RowhomeConfig } from "./types";
 
 export const defaultRowhomeConfig: RowhomeConfig = {
+  rowhomeCount: 1,
   lotWidthFt: 18,
   lotDepthFt: 90,
   buildingWidthFt: 18,
@@ -12,5 +13,7 @@ export const defaultRowhomeConfig: RowhomeConfig = {
   includeTree: true,
   facadeMaterialId: "brick-veneer",
   facadeStyleId: "flat-front",
-  stairImplementation: "alternating-run"
+  stairImplementation: "alternating-run",
+  structuralSupportScheme: "masonry-bearing",
+  brickDetailMode: "solid-textured"
 };

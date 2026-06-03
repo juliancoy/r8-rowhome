@@ -9,6 +9,7 @@ Initial generated components cite source files in their TypeScript metadata and 
 - Spiral stair dimensional reference: `sources/stairs/icc-irc-spiral-stairways-code-change-re-12-06-16.pdf`
 - Residential energy envelope, insulation, and air-sealing assumptions: `sources/code-building-codes-part-ix-b-residential-energy-code-full.html`
 - Electrical system assumptions: `sources/code-building-codes-part-iii-national-electrical-code-full.html`
+- Plumbing supply, DWV, vent, storm, condensate, fixture, and fluid-analysis pipe assumptions: `sources/code-building-codes-part-vi-international-plumbing-code-full.html`
 - Site, grading, and landscape assumptions: `sources/code-article-7-natural-resources-full.html`
 - Streetscape and tree assumptions: `sources/dot-complete-streets-manual-2021-03.pdf`
 

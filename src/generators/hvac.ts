@@ -69,7 +69,8 @@ export function addStandardHvacSystem(
   const d = config.buildingDepthFt;
   const notes = [
     "All-electric heat-pump HVAC system with explicit supply, return, and exhaust flow paths.",
-    "Ducts are hollow rectangular sheet-metal assemblies with flow-node metadata for FEM/CFD pre-processing."
+    "Ducts are hollow sheet-metal assemblies with flow-node metadata for FEM/CFD pre-processing.",
+    "Supply and return duct mains are modeled as insulated low-leakage galvanized sheet-metal ducts; exhaust paths are modeled as smooth-wall metal ductwork."
   ];
 
   box(
@@ -134,7 +135,7 @@ export function addStandardHvacSystem(
     duct(components, {
       id: `supply-trunk-${level}`,
       name: `Hollow supply duct trunk floor ${level}`,
-      material: "hollow galvanized steel rectangular supply duct, sealed seams",
+      material: "hollow insulated low-leakage galvanized sheet-metal rectangular supply duct",
       color: "#9aa7ad",
       outerWidth: 1.05,
       outerHeight: 0.62,
@@ -150,7 +151,7 @@ export function addStandardHvacSystem(
     duct(components, {
       id: `return-trunk-${level}`,
       name: `Hollow return duct trunk floor ${level}`,
-      material: "hollow galvanized steel rectangular return duct, sealed seams",
+      material: "hollow insulated low-leakage galvanized sheet-metal rectangular return duct",
       color: "#7f8b91",
       outerWidth: 0.9,
       outerHeight: 0.58,
@@ -167,7 +168,7 @@ export function addStandardHvacSystem(
       duct(components, {
         id: `supply-riser-${level}`,
         name: `Hollow supply riser to floor ${level}`,
-        material: "hollow galvanized steel vertical supply riser",
+        material: "hollow insulated low-leakage galvanized sheet-metal vertical supply riser",
         color: "#9aa7ad",
         outerWidth: 0.8,
         outerHeight: 0.55,
@@ -183,7 +184,7 @@ export function addStandardHvacSystem(
       duct(components, {
         id: `return-riser-${level}`,
         name: `Hollow return riser from floor ${level}`,
-        material: "hollow galvanized steel vertical return riser",
+        material: "hollow insulated low-leakage galvanized sheet-metal vertical return riser",
         color: "#7f8b91",
         outerWidth: 0.75,
         outerHeight: 0.55,
@@ -202,7 +203,7 @@ export function addStandardHvacSystem(
       duct(components, {
         id: `supply-branch-${room}-${level}`,
         name: `Hollow supply branch ${room} floor ${level}`,
-        material: "hollow galvanized steel rectangular supply branch duct",
+        material: "hollow insulated galvanized sheet-metal rectangular supply branch duct",
         color: "#aeb8bd",
         outerWidth: 0.62,
         outerHeight: 0.36,
@@ -239,7 +240,7 @@ export function addStandardHvacSystem(
   duct(components, {
     id: "bath-exhaust-duct",
     name: "Hollow bathroom exhaust duct to roof",
-    material: "hollow galvanized steel exhaust duct",
+    material: "hollow smooth-wall galvanized steel bathroom exhaust duct",
     color: "#b4bdc1",
     outerWidth: 0.55,
     outerHeight: 0.55,
@@ -255,7 +256,7 @@ export function addStandardHvacSystem(
   duct(components, {
     id: "kitchen-range-hood-duct",
     name: "Hollow kitchen range hood exhaust duct",
-    material: "hollow galvanized steel range hood exhaust duct",
+    material: "hollow smooth-wall rigid metal range hood exhaust duct",
     color: "#b4bdc1",
     outerWidth: 0.65,
     outerHeight: 0.65,

@@ -11,20 +11,45 @@ export const frontSpiralStairPlan = {
   floorOpeningHalfFt: 3.65
 } as const;
 
+const alternatingStairPlan = {
+  x: 2.8,
+  width: 3.2,
+  treadDepth: 0.78,
+  riserHeight: 0.625,
+  treadThickness: 0.18,
+  steps: 16,
+  landingDepth: 3.4,
+  landingExtraWidth: 0.2,
+  floorOpeningXMax: 5.15
+} as const;
+
+function alternatingStairDirection(floor: number): 1 | -1 {
+  return floor % 2 === 0 ? 1 : -1;
+}
+
+function alternatingStairYStart(direction: 1 | -1): number {
+  return direction === 1 ? 18.4 : 32.6;
+}
+
+function alternatingStairTopY(floor: number): number {
+  const direction = alternatingStairDirection(floor);
+  return alternatingStairYStart(direction) + direction * (alternatingStairPlan.steps * alternatingStairPlan.treadDepth + 1.7);
+}
+
 export function addAlternatingRunStairFlight(
   components: ModelComponent[],
   floor: number,
   baseZ: number,
   source: string
 ): void {
-  const stairWidth = 3.2;
-  const treadDepth = 0.78;
-  const riserHeight = 0.625;
-  const treadThickness = 0.18;
-  const steps = 16;
-  const x = 2.8;
-  const direction = floor % 2 === 0 ? 1 : -1;
-  const yStart = direction === 1 ? 18.4 : 32.6;
+  const stairWidth = alternatingStairPlan.width;
+  const treadDepth = alternatingStairPlan.treadDepth;
+  const riserHeight = alternatingStairPlan.riserHeight;
+  const treadThickness = alternatingStairPlan.treadThickness;
+  const steps = alternatingStairPlan.steps;
+  const x = alternatingStairPlan.x;
+  const direction = alternatingStairDirection(floor);
+  const yStart = alternatingStairYStart(direction);
   const runCenterY = yStart + direction * (steps * treadDepth) / 2;
   const stairNotes = [
     "Alternating floor-by-floor stair direction modeled as a compact rowhouse switchback run.",
@@ -83,13 +108,13 @@ export function addAlternatingRunStairFlight(
   }
 
   const topZ = baseZ + steps * riserHeight;
-  const topY = yStart + direction * (steps * treadDepth + 1.7);
+  const topY = alternatingStairTopY(floor);
   box(
     components,
     metadata(`stair-landing-${floor + 1}`, `Alternating stair landing ${floor + 1}`, "circulation", "wood stair landing", source, 1200, true, stairNotes),
     "#8a5e38",
-    stairWidth + 0.2,
-    3.4,
+    stairWidth + alternatingStairPlan.landingExtraWidth,
+    alternatingStairPlan.landingDepth,
     0.32,
     { x, y: topY, z: topZ + 0.16 }
   );
@@ -116,6 +141,44 @@ export function addAlternatingRunStairFlight(
       { x: railX, y: railY, z: railZ + 1.55 }
     );
   }
+}
+
+export function addAlternatingRunStairEgressBridge(
+  components: ModelComponent[],
+  floor: number,
+  baseZ: number,
+  source: string
+): void {
+  const landingWidth = alternatingStairPlan.width + alternatingStairPlan.landingExtraWidth;
+  const landingMaxX = alternatingStairPlan.x + landingWidth / 2;
+  const bridgeWidth = alternatingStairPlan.floorOpeningXMax - landingMaxX;
+  if (bridgeWidth <= 0.01) {
+    return;
+  }
+
+  const topZ = baseZ + alternatingStairPlan.steps * alternatingStairPlan.riserHeight;
+  const topY = alternatingStairTopY(floor);
+  box(
+    components,
+    metadata(
+      `stair-egress-bridge-${floor + 1}`,
+      `Stair egress bridge ${floor + 1}`,
+      "circulation",
+      "wood stair landing bridge to adjacent floor plate",
+      source,
+      650,
+      true,
+      [
+        "Connects the stair arrival landing flush to the adjacent floor or roof plate.",
+        "Prevents the modeled flight from terminating at an isolated landing within the stairwell opening."
+      ]
+    ),
+    "#9a6a3f",
+    bridgeWidth,
+    alternatingStairPlan.landingDepth,
+    0.32,
+    { x: landingMaxX + bridgeWidth / 2, y: topY, z: topZ + 0.16 }
+  );
 }
 
 export function addSpiralStairFlight(

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { Mesh, type Material } from "three";
+import { Box3, Group, InstancedMesh, Mesh, MeshStandardMaterial, Object3D, type Material } from "three";
+import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { defaultRowhomeConfig } from "../src/core/config";
 import { generateRowhome } from "../src/generators/rowhome";
 import { buildBom, totalEstimatedCost } from "../src/export/bom";
@@ -8,9 +10,11 @@ import { geometryTriangleCount } from "../src/geometry/component";
 import { estimateFacadeMaterialCost, facadeMaterialOptions } from "../src/core/facadeMaterials";
 import { facadeStyleOptions, selectedFacadeStyle } from "../src/core/facadeStyles";
 import { frontSpiralStairPlan } from "../src/generators/stairs";
-import { createFrontDoorAssembly, isFrontDoorLeafComponent, setFrontDoorOpen } from "../src/viewer/door";
+import { createFrontDoorAssembly, createWindowAssemblies, isFrontDoorLeafComponent, setFrontDoorOpen, setWindowOpen } from "../src/viewer/door";
 import { buildHouseLighting } from "../src/viewer/lighting";
 import { componentMatchesViewMode, viewLayerOptions, type ViewMode } from "../src/viewer/layers";
+import { syncRealProductModelVisibility } from "../src/viewer/productModels";
+import { brickCountForRectangle } from "../src/generators/brickwork";
 
 describe("rowhome generator", () => {
   it("generates a default source-traced rowhome model", () => {
@@ -21,6 +25,30 @@ describe("rowhome generator", () => {
     expect(model.components.length).toBeGreaterThan(20);
     expect(model.components.every((component) => component.metadata.source.length > 0)).toBe(true);
     expect(model.validation.some((message) => message.code === "professional_review_required")).toBe(true);
+    expect(model.components.some((component) => component.metadata.id === "front-sidewalk")).toBe(true);
+    expect(model.components.some((component) => component.metadata.id === "front-roadway")).toBe(true);
+    expect(model.components.some((component) => component.metadata.id === "side-roadway")).toBe(true);
+    expect(model.components.some((component) => component.metadata.id === "side-sidewalk")).toBe(true);
+    expect(model.components.filter((component) => component.metadata.id.startsWith("front-crosswalk-stripe-")).length).toBe(6);
+    expect(model.components.filter((component) => component.metadata.id.startsWith("side-crosswalk-stripe-")).length).toBe(5);
+  });
+
+  it("keeps the public sidewalks outside the house footprint and brings the front walk to the lot line", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const frontSidewalk = model.components.find((component) => component.metadata.id === "front-sidewalk");
+    const sideSidewalk = model.components.find((component) => component.metadata.id === "side-sidewalk");
+    const leftPartyWall = model.components.find((component) => component.metadata.id === "party-wall-left");
+
+    expect(frontSidewalk).toBeDefined();
+    expect(sideSidewalk).toBeDefined();
+    expect(leftPartyWall).toBeDefined();
+
+    const frontSidewalkBounds = new Box3().setFromObject(frontSidewalk!.object);
+    const sideSidewalkBounds = new Box3().setFromObject(sideSidewalk!.object);
+    const leftPartyWallBounds = new Box3().setFromObject(leftPartyWall!.object);
+
+    expect(frontSidewalkBounds.max.z).toBeCloseTo(-11, 3);
+    expect(sideSidewalkBounds.max.x).toBeLessThanOrEqual(leftPartyWallBounds.min.x + 0.01);
   });
 
   it("contains no gas-fitted components", () => {
@@ -87,6 +115,8 @@ describe("rowhome generator", () => {
     expect(flowEdges.every((edge) => (edge.innerWidthFt ?? 0) > 0 && (edge.innerHeightFt ?? 0) > 0 && (edge.wallThicknessFt ?? 0) > 0)).toBe(true);
     expect(flowEdges.some((edge) => edge.from === "supply-plenum" && edge.to === "supply-trunk-1-end")).toBe(true);
     expect(flowEdges.some((edge) => edge.from === "range-hood" && edge.to === "rear-wall-exhaust-termination")).toBe(true);
+    expect(ductComponents.some((component) => component.metadata.material.includes("low-leakage galvanized sheet-metal rectangular supply duct"))).toBe(true);
+    expect(ductComponents.some((component) => component.metadata.material.includes("smooth-wall rigid metal range hood exhaust duct"))).toBe(true);
   });
 
   it("keeps the circuit breaker panel accessible on the first floor and connects standardized electrical parts", () => {
@@ -145,6 +175,29 @@ describe("rowhome generator", () => {
     expect(model.components.some((component) => component.metadata.source.includes("part-ix-b-residential-energy-code"))).toBe(true);
   });
 
+  it("includes a roof photovoltaic array clear of stair and roof service zones", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const panels = model.components.filter((component) => component.metadata.id.startsWith("roof-solar-panel-"));
+    const racks = model.components.filter((component) => component.metadata.id.startsWith("roof-solar-rack-") || component.metadata.id.startsWith("roof-solar-rear-rack-"));
+    const combiner = model.components.find((component) => component.metadata.id === "roof-solar-combiner");
+    const raceway = model.components.find((component) => component.metadata.id === "roof-solar-dc-raceway");
+    const buildingHeight = defaultRowhomeConfig.stories * defaultRowhomeConfig.storyHeightFt;
+
+    expect(panels.length).toBe(9);
+    expect(racks.length).toBe(18);
+    expect(combiner?.metadata.material).toContain("photovoltaic");
+    expect(raceway?.metadata.material).toContain("photovoltaic");
+    for (const panel of panels) {
+      panel.object.updateMatrixWorld(true);
+      const bounds = new Box3().setFromObject(panel.object);
+      expect(bounds.min.x).toBeGreaterThan(5.15);
+      expect(bounds.max.x).toBeLessThan(defaultRowhomeConfig.buildingWidthFt - 1.0);
+      expect(bounds.min.z).toBeGreaterThan(5.0);
+      expect(bounds.max.z).toBeLessThan(25.5);
+      expect(bounds.min.y).toBeGreaterThan(buildingHeight + 0.3);
+    }
+  });
+
   it("generates a below-grade basement with foundation systems and access stairs", () => {
     const model = generateRowhome(defaultRowhomeConfig);
     const ids = new Set(model.components.map((component) => component.metadata.id));
@@ -168,6 +221,10 @@ describe("rowhome generator", () => {
   it("generates rooms, stairs, furniture, and kitchen fixtures", () => {
     const model = generateRowhome(defaultRowhomeConfig);
     const ids = new Set(model.components.map((component) => component.metadata.id));
+    const refrigerator = model.components.find((component) => component.metadata.id === "refrigerator");
+    const fiddleLeafFig = model.components.find((component) => component.metadata.id === "living-room-fiddle-leaf-fig");
+    const streetTree = model.components.find((component) => component.metadata.id === "street-tree-real-model-bounds");
+    const waterHeater = model.components.find((component) => component.metadata.id === "electric-water-heater");
 
     expect(ids.has("stair-run-1")).toBe(true);
     expect(ids.has("stair-landing-1")).toBe(true);
@@ -182,8 +239,79 @@ describe("rowhome generator", () => {
     expect(ids.has("kitchen-island")).toBe(true);
     expect(ids.has("electric-range")).toBe(true);
     expect(ids.has("refrigerator")).toBe(true);
+    expect(refrigerator?.metadata.realProductModel?.brand).toBe("IKEA");
+    expect(refrigerator?.metadata.realProductModel?.articleNumber).toBe("305.876.26");
+    expect(refrigerator?.metadata.realProductModel?.url).toBe("/models/ikea-lagan-30587626-refrigerator.glb");
+    const refrigeratorModelPath = join(process.cwd(), "public/models/ikea-lagan-30587626-refrigerator.glb");
+    expect(existsSync(refrigeratorModelPath)).toBe(true);
+    expect(statSync(refrigeratorModelPath).size).toBeGreaterThan(1_000_000);
+    expect(ids.has("living-room-fiddle-leaf-fig")).toBe(true);
+    expect(fiddleLeafFig?.metadata.realProductModel?.brand).toBe("IKEA");
+    expect(fiddleLeafFig?.metadata.realProductModel?.articleNumber).toBe("805.688.90");
+    const plantModelPath = join(process.cwd(), "public/models/ikea-fejka-80568890-fiddle-leaf-fig.glb");
+    expect(existsSync(plantModelPath)).toBe(true);
+    expect(statSync(plantModelPath).size).toBeGreaterThan(100_000);
+    expect(streetTree?.metadata.realProductModel?.license).toBe("CC0");
+    expect(streetTree?.metadata.realProductModel?.hideComponentIds).toEqual(["street-tree-trunk", "street-tree-canopy"]);
+    const localStreetTreeOverridePath = join(process.cwd(), "assets/Tree1.3ds");
+    expect(existsSync(localStreetTreeOverridePath)).toBe(true);
+    expect(statSync(localStreetTreeOverridePath).size).toBeGreaterThan(3_000_000);
+    const streetTreeModelPath = join(process.cwd(), "public/models/cc0/tree_01_art.glb");
+    expect(existsSync(streetTreeModelPath)).toBe(true);
+    expect(statSync(streetTreeModelPath).size).toBeGreaterThan(900_000);
+    expect(waterHeater?.metadata.notes?.some((note) => note.includes("Rheem ProTerra"))).toBe(true);
+    expect(existsSync(join(process.cwd(), "public/draco/draco_decoder.wasm"))).toBe(true);
     expect(ids.has("kitchen-sink")).toBe(true);
     expect(model.components.filter((component) => component.metadata.id.startsWith("stair-tread-")).length).toBe(48);
+  });
+
+  it("keeps replacement product models visible after hiding their placeholders", () => {
+    const placeholder = new Object3D();
+    const hiddenFallback = new Object3D();
+    const replacementRoot = new Group();
+    const replacementMesh = new Object3D();
+    replacementMesh.userData = { productModelFor: "street-tree-real-model-bounds" };
+    replacementRoot.add(replacementMesh);
+
+    const components = [
+      {
+        metadata: {
+          id: "street-tree-real-model-bounds",
+          name: "Street tree model bounds",
+          category: "landscape" as const,
+          material: "street tree visual asset placement bounds",
+          source: "test",
+          estimatedCostUsd: 0,
+          printable: false
+        },
+        object: placeholder
+      },
+      {
+        metadata: {
+          id: "street-tree-canopy",
+          name: "Street tree canopy",
+          category: "landscape" as const,
+          material: "urban tree canopy",
+          source: "test",
+          estimatedCostUsd: 0,
+          printable: false
+        },
+        object: hiddenFallback
+      }
+    ];
+
+    placeholder.userData.realProductTargetVisible = true;
+    placeholder.userData.realProductReplaced = true;
+    placeholder.visible = false;
+    hiddenFallback.userData.realProductTargetVisible = false;
+    hiddenFallback.userData.realProductReplaced = true;
+    hiddenFallback.visible = false;
+
+    syncRealProductModelVisibility(replacementRoot, components, "all", null);
+
+    expect(replacementMesh.visible).toBe(true);
+    expect(placeholder.visible).toBe(false);
+    expect(hiddenFallback.visible).toBe(false);
   });
 
   it("models wall assemblies with real material layers and depth", () => {
@@ -199,6 +327,67 @@ describe("rowhome generator", () => {
     expect(ids.has("first-floor-partition-front-gypsum")).toBe(true);
     expect(ids.has("first-floor-partition-rear-gypsum")).toBe(true);
     expect(model.components.find((component) => component.metadata.id === "first-floor-partition")?.metadata.material).toContain("2x4 wood stud");
+  });
+
+  it("defaults to solid textured masonry walls while preserving the brick takeoff", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const brickComponents = model.components.filter((component) => component.metadata.quantity?.kind === "standard-brick" && component.metadata.id !== "brick-takeoff-summary");
+    const summary = model.components.find((component) => component.metadata.id === "brick-takeoff-summary");
+
+    expect(defaultRowhomeConfig.brickDetailMode).toBe("solid-textured");
+    expect(brickComponents).toEqual([]);
+    expect(summary?.metadata.quantity?.count).toBeGreaterThan(20_000);
+    expect(summary?.metadata.quantity?.actualSizeIn).toEqual({ length: 7.625, width: 3.625, height: 2.25 });
+    expect(summary?.metadata.quantity?.nominalModuleIn).toEqual({ length: 8, height: 2.625 });
+  });
+
+  it("scales solid wall brick textures to standard modular coursing", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const partyWall = model.components.find((component) => component.metadata.id === "party-wall-left")?.object as Mesh | undefined;
+    const material = partyWall?.material as MeshStandardMaterial | undefined;
+
+    expect(material?.map?.repeat.x).toBeCloseTo(defaultRowhomeConfig.buildingDepthFt / (8 / 12) / 4);
+    expect(material?.map?.repeat.y).toBeCloseTo((defaultRowhomeConfig.stories * defaultRowhomeConfig.storyHeightFt) / (2.625 / 12) / 8);
+  });
+
+  it("can optionally place standard bricks as instanced units", () => {
+    const model = generateRowhome({ ...defaultRowhomeConfig, brickDetailMode: "individual-bricks" });
+    const brickComponents = model.components.filter((component) => component.metadata.quantity?.kind === "standard-brick" && component.metadata.id !== "brick-takeoff-summary");
+    const summary = model.components.find((component) => component.metadata.id === "brick-takeoff-summary");
+    const totalBricks = brickComponents.reduce((sum, component) => sum + (component.metadata.quantity?.count ?? 0), 0);
+
+    expect(brickComponents.length).toBeGreaterThan(8);
+    expect(brickComponents.every((component) => component.object instanceof InstancedMesh)).toBe(true);
+    expect(brickComponents.every((component) => (component.object as InstancedMesh).count === component.metadata.quantity?.count)).toBe(true);
+    expect(summary?.metadata.quantity?.count).toBe(totalBricks);
+    expect(model.components.find((component) => component.metadata.id === "party-wall-left-standard-bricks")?.metadata.quantity?.count)
+      .toBe(brickCountForRectangle(defaultRowhomeConfig.buildingDepthFt, defaultRowhomeConfig.stories * defaultRowhomeConfig.storyHeightFt) * 2);
+    expect(brickComponents[0].metadata.quantity?.actualSizeIn).toEqual({ length: 7.625, width: 3.625, height: 2.25 });
+    expect(brickComponents[0].metadata.quantity?.nominalModuleIn).toEqual({ length: 8, height: 2.625 });
+  });
+
+  it("assembles multiple rowhomes with shared party walls instead of duplicated side walls", () => {
+    const rowhomeCount = 3;
+    const model = generateRowhome({ ...defaultRowhomeConfig, rowhomeCount });
+    const ids = new Set(model.components.map((component) => component.metadata.id));
+    const summary = model.components.find((component) => component.metadata.id === "brick-takeoff-summary");
+    const singleModel = generateRowhome(defaultRowhomeConfig);
+    const singleSummary = singleModel.components.find((component) => component.metadata.id === "brick-takeoff-summary")?.metadata.quantity?.count ?? 0;
+    const partyBoundaryBricks = brickCountForRectangle(
+      defaultRowhomeConfig.buildingDepthFt,
+      defaultRowhomeConfig.stories * defaultRowhomeConfig.storyHeightFt
+    ) * 2;
+
+    expect(model.name).toContain("3-Rowhome");
+    expect(ids.has("row-left-party-wall")).toBe(true);
+    expect(ids.has("shared-party-wall-1")).toBe(true);
+    expect(ids.has("shared-party-wall-2")).toBe(true);
+    expect(ids.has("row-right-party-wall")).toBe(true);
+    expect([...ids].filter((id) => /^unit-\d-party-wall-(left|right)$/.test(id))).toEqual([]);
+    expect([...ids].filter((id) => /^shared-party-wall-\d$/.test(id))).toHaveLength(rowhomeCount - 1);
+    expect([...ids].filter((id) => /^unit-\d-front-facade$/.test(id))).toHaveLength(rowhomeCount);
+    expect(summary?.metadata.quantity?.count).toBe((singleSummary - partyBoundaryBricks * 2) * rowhomeCount + partyBoundaryBricks * (rowhomeCount + 1));
+    expect(model.structural?.gravityReport.roofAreaSqFt).toBe(defaultRowhomeConfig.buildingWidthFt * rowhomeCount * defaultRowhomeConfig.buildingDepthFt);
   });
 
   it("models Baltimore rowhouse door and window anatomy", () => {
@@ -294,6 +483,28 @@ describe("rowhome generator", () => {
     expect(movingDoorParts.every((component) => component.object.position.distanceTo(originalPositions.get(component.metadata.id)!) < 0.001)).toBe(true);
   });
 
+  it("opens and closes front window sash assemblies while fixed trim stays put", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const assemblies = createWindowAssemblies(model.components);
+    const assembly = assemblies.find((item) => item.id === "front-window-left-1");
+    const movingWindow = model.components.find((component) => component.metadata.id === "front-window-left-1")?.object as Mesh | undefined;
+    const fixedJamb = model.components.find((component) => component.metadata.id === "front-window-left-1-left-jamb")?.object as Mesh | undefined;
+    const originalWindowY = movingWindow?.position.y ?? 0;
+    const fixedJambPosition = fixedJamb?.position.clone();
+
+    expect(assembly).toBeTruthy();
+    setWindowOpen(assembly!, true);
+
+    expect(assembly?.isOpen).toBe(true);
+    expect(movingWindow?.position.y).toBeGreaterThan(originalWindowY + 1);
+    expect(fixedJamb?.position.equals(fixedJambPosition!)).toBe(true);
+
+    setWindowOpen(assembly!, false);
+
+    expect(assembly?.isOpen).toBe(false);
+    expect(movingWindow?.position.y).toBeCloseTo(originalWindowY);
+  });
+
   it("leaves pass-through openings in interior partition walls", () => {
     const model = generateRowhome(defaultRowhomeConfig);
     const ids = new Set(model.components.map((component) => component.metadata.id));
@@ -303,8 +514,10 @@ describe("rowhome generator", () => {
     expect(ids.has("first-floor-partition-header")).toBe(true);
     const leftCore = model.components.find((component) => component.metadata.id === "first-floor-partition")?.object as Mesh | undefined;
     const rightCore = model.components.find((component) => component.metadata.id === "first-floor-partition-right")?.object as Mesh | undefined;
+    const leftBounds = leftCore ? new Box3().setFromObject(leftCore) : undefined;
     expect(leftCore?.position.x).toBeLessThan(defaultRowhomeConfig.buildingWidthFt / 2);
     expect(rightCore?.position.x).toBeGreaterThan(defaultRowhomeConfig.buildingWidthFt / 2);
+    expect((leftBounds?.max.y ?? 0) - (leftBounds?.min.y ?? 0)).toBeCloseTo(defaultRowhomeConfig.storyHeightFt - 0.32, 3);
   });
 
   it("alternates straight stair flight direction by floor", () => {
@@ -360,14 +573,16 @@ describe("rowhome generator", () => {
 
   it("classifies generated components into inspectable layer views", () => {
     const model = generateRowhome(defaultRowhomeConfig);
-    const modes: ViewMode[] = ["electrical", "hvac", "wood-structure", "load-bearing", "envelope", "fire", "insulation", "interior", "site", "architecture"];
+    const modes: ViewMode[] = ["electrical", "hvac", "plumbing", "wood-structure", "load-bearing", "structural-demand", "envelope", "fire", "insulation", "interior", "site", "architecture"];
 
     expect(viewLayerOptions.map((option) => option.id)).toEqual([
       "all",
       "electrical",
       "hvac",
+      "plumbing",
       "wood-structure",
       "load-bearing",
+      "structural-demand",
       "envelope",
       "fire",
       "insulation",
@@ -380,11 +595,45 @@ describe("rowhome generator", () => {
     }
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "electrical-panel")!, "electrical")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "supply-trunk-1")!, "hvac")).toBe(true);
+    expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "water-service-lateral")!, "plumbing")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "floor-plate-1")!, "wood-structure")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "party-wall-left")!, "load-bearing")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "front-wall-weather-barrier")!, "envelope")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "party-wall-left-type-x-gypsum")!, "fire")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "roof-insulation-and-air-barrier")!, "insulation")).toBe(true);
+  });
+
+  it("generates connected hollow plumbing components for supply, drainage, venting, storm, and condensate", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const ids = new Set(model.components.map((component) => component.metadata.id));
+    const requiredIds = [
+      "water-service-lateral",
+      "backflow-to-cold-water-manifold",
+      "cold-water-vertical-riser",
+      "hot-water-vertical-riser",
+      "soil-stack",
+      "vent-stack-through-roof",
+      "roof-drain-leader",
+      "air-handler-condensate-drain",
+      "bath-1-toilet",
+      "main-water-shutoff",
+      "domestic-backflow-preventer"
+    ];
+
+    for (const id of requiredIds) {
+      expect(ids.has(id)).toBe(true);
+    }
+
+    const plumbingPipes = model.components.filter((component) => component.object.userData.plumbing?.hollow === true);
+    expect(plumbingPipes.length).toBeGreaterThanOrEqual(30);
+    for (const pipe of plumbingPipes) {
+      const plumbing = pipe.object.userData.plumbing;
+      expect(plumbing.from).toBeTruthy();
+      expect(plumbing.to).toBeTruthy();
+      expect(plumbing.innerAreaSqFt).toBeGreaterThan(0);
+      expect(plumbing.innerDiameterFt).toBeGreaterThan(0);
+      expect(pipe.metadata.source).toBe("sources/code-building-codes-part-vi-international-plumbing-code-full.html");
+    }
   });
 
   it("builds BOM and estimated cost metadata", () => {
@@ -393,6 +642,10 @@ describe("rowhome generator", () => {
 
     expect(bom.length).toBeGreaterThan(5);
     expect(totalEstimatedCost(model)).toBeGreaterThan(100000);
+    expect(bom
+      .filter((line) => line.material === "standard modular brick takeoff")
+      .reduce((sum, line) => sum + (line.quantity?.count ?? 0), 0)
+    ).toBeGreaterThan(20_000);
   });
 
   it("supports facade material options with cost estimates", () => {
@@ -456,5 +709,29 @@ describe("rowhome generator", () => {
     const material = (windowComponent!.object as Mesh).material as Material;
     expect(material.transparent).toBe(true);
     expect(material.opacity).toBeLessThan(1);
+  });
+
+  it("uses renderer-portable texture maps for opaque material variation", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const facadeComponent = model.components.find((component) => component.metadata.id === "front-facade");
+    expect(facadeComponent?.object).toBeInstanceOf(Mesh);
+    const material = (facadeComponent!.object as Mesh).material;
+    expect(material).toBeInstanceOf(MeshStandardMaterial);
+    expect((material as MeshStandardMaterial).map).toBeTruthy();
+    expect((material as MeshStandardMaterial).bumpMap).toBeTruthy();
+    expect((material as MeshStandardMaterial).onBeforeCompile.toString()).not.toContain("surfaceVariationIntensity");
+  });
+
+  it("gives generated textured geometries UV coordinates for WebGPU", () => {
+    const model = generateRowhome({ ...defaultRowhomeConfig, facadeStyleId: "bowed-front" });
+    const texturedComponents = model.components.filter((component) => {
+      const material = (component.object as Mesh).material;
+      return material instanceof MeshStandardMaterial && Boolean(material.map);
+    });
+
+    expect(texturedComponents.length).toBeGreaterThan(20);
+    for (const component of texturedComponents) {
+      expect(component.geometry?.getAttribute("uv"), component.metadata.id).toBeTruthy();
+    }
   });
 });

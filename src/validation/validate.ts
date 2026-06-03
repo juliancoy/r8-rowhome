@@ -41,6 +41,23 @@ export function validateRowhome(config: RowhomeConfig, model: RowhomeModel): Val
     });
   }
 
+  if (model.structural?.status === "conceptual-load-model") {
+    messages.push({
+      severity: "warning",
+      code: "conceptual_structural_model_only",
+      message: "Structural data is limited to a conceptual gravity-load model; stiffness, member capacity, foundation bearing, and load combinations are not solved.",
+      source: sources.residentialCode
+    });
+  }
+
+  if (!model.structural || model.structural.supports.length === 0) {
+    messages.push({
+      severity: "error",
+      code: "missing_structural_supports",
+      message: "Structural model has no defined support restraints.",
+      source: sources.residentialCode
+    });
+  }
+
   return messages;
 }
-

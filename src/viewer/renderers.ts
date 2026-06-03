@@ -6,6 +6,9 @@ export type PreferredRenderer = {
   render: (scene: Scene, camera: Camera) => void | Promise<void>;
   setPixelRatio: (value: number) => void;
   setSize: (width: number, height: number, updateStyle?: boolean) => void;
+  setViewport?: (x: number, y: number, width: number, height: number) => void;
+  setScissor?: (x: number, y: number, width: number, height: number) => void;
+  setScissorTest?: (enabled: boolean) => void;
   shadowMap?: {
     enabled: boolean;
     type: number;

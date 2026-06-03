@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T03:47:08.543Z",
+  "generatedAt": "2026-06-03T00:54:30.047Z",
   "purpose": "Headless CI thermofluid preflight report. The website renderer does not run this test or FEM workflow.",
   "edgeCount": 21,
   "nodeCount": 30,

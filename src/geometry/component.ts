@@ -4,11 +4,18 @@ import {
   Float32BufferAttribute,
   Color,
   CylinderGeometry,
+  DataTexture,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
-  Object3D
+  Object3D,
+  RepeatWrapping,
+  RGBAFormat,
+  SRGBColorSpace,
+  type Texture
 } from "three";
 import type { ComponentMetadata, ModelComponent } from "../core/types";
 
@@ -25,11 +32,18 @@ type MaterialFamily =
   | "gypsum"
   | "insulation"
   | "generic";
-type ShaderPatch = {
-  uniforms: Record<string, { value: number }>;
-  vertexShader: string;
-  fragmentShader: string;
+type TexturedMaterialFamily = Exclude<MaterialFamily, "glass" | "generic">;
+type SurfaceTextureSet = {
+  colorMap: Texture;
+  bumpMap: Texture;
+  bumpScale: number;
 };
+
+const surfaceTextureCache = new Map<TexturedMaterialFamily, SurfaceTextureSet>();
+const proceduralBrickTextureModules = {
+  horizontal: 4,
+  vertical: 8
+} as const;
 
 function classifyMaterial(metadata?: ComponentMetadata): MaterialFamily {
   const text = `${metadata?.material ?? ""} ${metadata?.name ?? ""} ${metadata?.category ?? ""}`.toLowerCase();
@@ -47,69 +61,180 @@ function classifyMaterial(metadata?: ComponentMetadata): MaterialFamily {
   return "generic";
 }
 
-function addProceduralSurfaceShader(material: MeshStandardMaterial | MeshPhysicalMaterial, family: MaterialFamily): void {
+function hash2(x: number, y: number, seed: number): number {
+  return Math.abs(Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453) % 1;
+}
+
+function surfaceValue(family: TexturedMaterialFamily, x: number, y: number, size: number): number {
+  const noise = hash2(x, y, family.length);
+  if (family === "brick") {
+    const brickWidth = 16;
+    const brickHeight = 8;
+    const course = Math.floor(y / brickHeight);
+    const shiftedX = (x + (course % 2) * brickWidth * 0.5) % brickWidth;
+    const mortar = shiftedX < 1 || y % brickHeight < 1;
+    return mortar ? 0.48 : 0.82 + noise * 0.14;
+  }
+  if (family === "wood") {
+    const grain = Math.sin((x / size) * Math.PI * 18 + Math.sin(y * 0.18) * 0.8);
+    return 0.70 + grain * 0.10 + noise * 0.08;
+  }
+  if (family === "metal" || family === "duct" || family === "appliance") {
+    const seam = x % 18 < 1 || y % 18 < 1;
+    return seam ? 0.62 : 0.82 + Math.sin((x + y) * 0.55) * 0.04 + noise * 0.05;
+  }
+  if (family === "site") {
+    return 0.55 + noise * 0.34 + Math.sin(x * 0.9) * Math.sin(y * 0.7) * 0.08;
+  }
+  if (family === "insulation") {
+    return 0.58 + noise * 0.30 + Math.sin((x - y) * 0.9) * 0.10;
+  }
+  if (family === "gypsum") {
+    return 0.80 + noise * 0.08;
+  }
+  if (family === "stone" || family === "concrete") {
+    return 0.66 + noise * 0.22 + Math.sin(x * 0.32) * Math.sin(y * 0.21) * 0.06;
+  }
+  return 0.78 + noise * 0.10;
+}
+
+function makeSurfaceTexture(family: TexturedMaterialFamily, bump: boolean): Texture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const value = Math.max(0, Math.min(1, surfaceValue(family, x, y, size)));
+      const channel = Math.round((bump ? value : 0.45 + value * 0.55) * 255);
+      const offset = (y * size + x) * 4;
+      data[offset] = channel;
+      data[offset + 1] = channel;
+      data[offset + 2] = channel;
+      data[offset + 3] = 255;
+    }
+  }
+
+  const texture = new DataTexture(data, size, size, RGBAFormat);
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  texture.repeat.set(5.0, 5.0);
+  if (!bump) {
+    texture.colorSpace = SRGBColorSpace;
+  }
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function surfaceTextures(family: TexturedMaterialFamily): SurfaceTextureSet {
+  const cached = surfaceTextureCache.get(family);
+  if (cached) {
+    return cached;
+  }
+
+  const bumpScaleByFamily: Record<TexturedMaterialFamily, number> = {
+    brick: 0.035,
+    stone: 0.025,
+    wood: 0.018,
+    metal: 0.007,
+    duct: 0.006,
+    appliance: 0.004,
+    concrete: 0.022,
+    site: 0.018,
+    gypsum: 0.005,
+    insulation: 0.03
+  };
+  const textures = {
+    colorMap: makeSurfaceTexture(family, false),
+    bumpMap: makeSurfaceTexture(family, true),
+    bumpScale: bumpScaleByFamily[family]
+  };
+  surfaceTextureCache.set(family, textures);
+  return textures;
+}
+
+function addPlanarUvCoordinates(geometry: BufferGeometry): void {
+  const position = geometry.getAttribute("position");
+  if (!position || geometry.getAttribute("uv")) {
+    return;
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < position.count; i += 1) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+    maxZ = Math.max(maxZ, z);
+  }
+
+  type UvAxis = "x" | "y" | "z";
+  const ranges = ([
+    { axis: "x", min: minX, range: Math.max(maxX - minX, 0.0001) },
+    { axis: "y", min: minY, range: Math.max(maxY - minY, 0.0001) },
+    { axis: "z", min: minZ, range: Math.max(maxZ - minZ, 0.0001) }
+  ] satisfies Array<{ axis: UvAxis; min: number; range: number }>).sort((a, b) => b.range - a.range);
+  const uAxis = ranges[0];
+  const vAxis = ranges[1];
+  const uvs: number[] = [];
+
+  for (let i = 0; i < position.count; i += 1) {
+    const valueByAxis = {
+      x: position.getX(i),
+      y: position.getY(i),
+      z: position.getZ(i)
+    };
+    uvs.push((valueByAxis[uAxis.axis] - uAxis.min) / uAxis.range);
+    uvs.push((valueByAxis[vAxis.axis] - vAxis.min) / vAxis.range);
+  }
+
+  geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
+}
+
+function addProceduralSurfaceTextures(material: MeshStandardMaterial | MeshPhysicalMaterial, family: MaterialFamily): void {
   if (family === "glass" || family === "generic") {
     return;
   }
 
-  const intensityByFamily: Record<Exclude<MaterialFamily, "glass" | "generic">, number> = {
-    brick: 0.22,
-    stone: 0.14,
-    wood: 0.18,
-    metal: 0.08,
-    duct: 0.10,
-    appliance: 0.06,
-    concrete: 0.16,
-    site: 0.20,
-    gypsum: 0.05,
-    insulation: 0.24
-  };
-  const scaleByFamily: Record<Exclude<MaterialFamily, "glass" | "generic">, number> = {
-    brick: 3.2,
-    stone: 1.7,
-    wood: 5.4,
-    metal: 7.0,
-    duct: 8.0,
-    appliance: 6.0,
-    concrete: 2.1,
-    site: 3.5,
-    gypsum: 2.6,
-    insulation: 5.8
-  };
+  const textures = surfaceTextures(family);
+  material.map = textures.colorMap;
+  material.bumpMap = textures.bumpMap;
+  material.bumpScale = textures.bumpScale;
+  material.needsUpdate = true;
+}
 
-  const intensity = intensityByFamily[family];
-  const scale = scaleByFamily[family];
-  material.onBeforeCompile = (shader: ShaderPatch) => {
-    shader.uniforms.surfaceVariationIntensity = { value: intensity };
-    shader.uniforms.surfaceVariationScale = { value: scale };
-    shader.vertexShader = shader.vertexShader.replace(
-      "#include <common>",
-      `#include <common>
-       varying vec3 vSurfaceWorldPosition;`
-    );
-    shader.vertexShader = shader.vertexShader.replace(
-      "#include <begin_vertex>",
-      `#include <begin_vertex>
-       vSurfaceWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`
-    );
-    shader.fragmentShader = shader.fragmentShader.replace(
-      "#include <common>",
-      `#include <common>
-       uniform float surfaceVariationIntensity;
-       uniform float surfaceVariationScale;
-       varying vec3 vSurfaceWorldPosition;
-       float surfaceHash(vec3 p) {
-         return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
-       }`
-    );
-    shader.fragmentShader = shader.fragmentShader.replace(
-      "#include <color_fragment>",
-      `#include <color_fragment>
-       vec3 cell = floor(vSurfaceWorldPosition * surfaceVariationScale);
-       float variation = surfaceHash(cell) - 0.5;
-       diffuseColor.rgb *= 1.0 + variation * surfaceVariationIntensity;`
-    );
-  };
+function scaleBrickTextureToModule(
+  material: MeshStandardMaterial | MeshPhysicalMaterial,
+  metadata: ComponentMetadata | undefined,
+  width: number,
+  depth: number,
+  height: number
+): void {
+  if (classifyMaterial(metadata) !== "brick") {
+    return;
+  }
+
+  const horizontalModuleFt = 8 / 12;
+  const verticalModuleFt = 2.625 / 12;
+  const repeatX = Math.max(1, Math.max(width, depth) / horizontalModuleFt / proceduralBrickTextureModules.horizontal);
+  const repeatY = Math.max(1, height / verticalModuleFt / proceduralBrickTextureModules.vertical);
+  if (material.map) {
+    material.map = material.map.clone();
+    material.map.repeat.set(repeatX, repeatY);
+    material.map.needsUpdate = true;
+  }
+  if (material.bumpMap) {
+    material.bumpMap = material.bumpMap.clone();
+    material.bumpMap.repeat.set(repeatX, repeatY);
+    material.bumpMap.needsUpdate = true;
+  }
   material.needsUpdate = true;
 }
 
@@ -161,7 +286,7 @@ export function makeMaterial(color: string, metadata?: ComponentMetadata): MeshS
     roughness: roughnessByFamily[family],
     metalness: metalnessByFamily[family]
   });
-  addProceduralSurfaceShader(material, family);
+  addProceduralSurfaceTextures(material, family);
   return material;
 }
 
@@ -176,11 +301,34 @@ export function makeBoxComponent(
 ): ModelComponent {
   const geometry = new BoxGeometry(width, height, depth);
   geometry.computeVertexNormals();
-  const mesh = new Mesh(geometry, makeMaterial(color, metadata));
+  const material = makeMaterial(color, metadata);
+  scaleBrickTextureToModule(material, metadata, width, depth, height);
+  const mesh = new Mesh(geometry, material);
   mesh.position.set(center.x, center.z, center.y);
   mesh.rotation.y = rotationYRadians;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+  mesh.name = metadata.name;
+  mesh.userData = metadata;
+  return { metadata, object: mesh, geometry };
+}
+
+export function makeInstancedBoxComponent(
+  metadata: ComponentMetadata,
+  color: string,
+  width: number,
+  depth: number,
+  height: number,
+  transforms: Matrix4[],
+  shadows: { cast?: boolean; receive?: boolean } = {}
+): ModelComponent {
+  const geometry = new BoxGeometry(width, height, depth);
+  geometry.computeVertexNormals();
+  const mesh = new InstancedMesh(geometry, makeMaterial(color, metadata), transforms.length);
+  transforms.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.castShadow = shadows.cast ?? true;
+  mesh.receiveShadow = shadows.receive ?? true;
   mesh.name = metadata.name;
   mesh.userData = metadata;
   return { metadata, object: mesh, geometry };
@@ -265,6 +413,7 @@ export function makeHollowRectangularDuctComponent(
 
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  addPlanarUvCoordinates(geometry);
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   const mesh = new Mesh(geometry, makeMaterial(color, metadata));
@@ -337,6 +486,7 @@ export function makeHollowPipeComponent(
 
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  addPlanarUvCoordinates(geometry);
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   const mesh = new Mesh(geometry, makeMaterial(color, metadata));
@@ -395,10 +545,13 @@ export function makeCurvedFacadeComponent(
 
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  addPlanarUvCoordinates(geometry);
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
 
-  const mesh = new Mesh(geometry, makeMaterial(color, metadata));
+  const material = makeMaterial(color, metadata);
+  scaleBrickTextureToModule(material, metadata, width, thickness, height);
+  const mesh = new Mesh(geometry, material);
   mesh.position.set(center.x, center.z, center.y);
   mesh.castShadow = true;
   mesh.receiveShadow = true;

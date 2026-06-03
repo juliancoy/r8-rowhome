@@ -99,8 +99,9 @@ The model follows the mission requirement for an all-electric house with no gas-
 - Heating/cooling: `air-source heat pump condenser`, `electric air handler with supply and return plenums`, and `insulated refrigerant lines and control wire`.
 - Ventilation: hollow galvanized steel rectangular supply, return, branch, riser, bathroom exhaust, and kitchen range hood ducts. Each duct is modeled as sheet-metal walls around an interior void and carries flow-node, design-CFM, design-velocity, and hydraulic-area metadata for downstream thermofluid/FEM or CFD preprocessing.
 - Hot water: `electric heat pump water heater`.
+- Plumbing: hollow potable-water service and distribution piping, represented as approved water-service pipe, Type L copper tube, and PEX/copper fixture branches; hollow PVC DWV, vent, storm leader, and condensate drain piping; standard shutoff, pressure-reducing, backflow-prevention, manifold, toilet, lavatory, shower, sink, and faucet fixtures. Each pipe carries connected flow-node names, nominal diameter, internal area, design GPM, DFU, slope, and hollow-pipe metadata so it can be exported for command-line fluid-analysis preprocessing without running that workflow in the normal website renderer.
 
-These are selected to make the electrical and ventilation systems inspectable in the viewer while staying consistent with the all-electric mission. Sources: `sources/code-building-codes-part-iii-national-electrical-code-full.html` and residential/mechanical code baseline files in `sources/`.
+These are selected to make the electrical, ventilation, and plumbing systems inspectable in the viewer while staying consistent with the all-electric mission. Sources: `sources/code-building-codes-part-iii-national-electrical-code-full.html`, `sources/code-building-codes-part-vi-international-plumbing-code-full.html`, and residential/mechanical code baseline files in `sources/`.
 
 ## Interior Materials And Fixtures
 

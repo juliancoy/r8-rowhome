@@ -200,7 +200,19 @@ export function addBasement(components: ModelComponent[], config: RowhomeConfig)
   );
   box(
     components,
-    metadata("electric-water-heater", "Basement electric water heater", "systems", "electric heat pump water heater", sources.electricalCode, 3600),
+    metadata(
+      "electric-water-heater",
+      "Basement electric heat-pump water heater",
+      "systems",
+      "electric heat pump water heater",
+      sources.electricalCode,
+      3600,
+      true,
+      [
+        "Current placeholder represents an all-electric heat-pump tank water heater rather than a combustion boiler.",
+        "Purchasable realistic model candidate: Rheem ProTerra Hybrid Heat Pump Electric Water Heater model from 3DModels.org, available in GLB/glTF after purchase."
+      ]
+    ),
     "#c7d1d8",
     2.0,
     2.0,
@@ -210,4 +222,3 @@ export function addBasement(components: ModelComponent[], config: RowhomeConfig)
 
   addBasementStairFlight(components, basementDepth);
 }
-

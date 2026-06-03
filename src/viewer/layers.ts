@@ -4,6 +4,7 @@ export type ViewMode =
   | "all"
   | "electrical"
   | "hvac"
+  | "plumbing"
   | "wood-structure"
   | "load-bearing"
   | "envelope"
@@ -11,7 +12,8 @@ export type ViewMode =
   | "insulation"
   | "interior"
   | "site"
-  | "architecture";
+  | "architecture"
+  | "structural-demand";
 
 export interface ViewLayerOption {
   id: ViewMode;
@@ -36,6 +38,11 @@ export const viewLayerOptions: ViewLayerOption[] = [
     notes: "Heat pump, air handler, refrigerant lines, ducts, registers, and exhaust paths."
   },
   {
+    id: "plumbing",
+    label: "Plumbing",
+    notes: "Water service, hot/cold supply, DWV, vent, storm, condensate, and hollow pipe flow paths."
+  },
+  {
     id: "wood-structure",
     label: "Wood structure",
     notes: "Engineered wood framing, wood studs, sheathing, stair framing, guards, rails, and other structural wood."
@@ -44,6 +51,11 @@ export const viewLayerOptions: ViewLayerOption[] = [
     id: "load-bearing",
     label: "Load bearing",
     notes: "Foundation, party walls, rear wall, structural backup, floor plates, roof deck, lintels, and columns."
+  },
+  {
+    id: "structural-demand",
+    label: "Gravity demand",
+    notes: "Conceptual blue-to-red gravity demand overlay on load-bearing surfaces; not solved stress or capacity."
   },
   {
     id: "envelope",
@@ -94,11 +106,17 @@ export function componentMatchesViewMode(component: ModelComponent, viewMode: Vi
   if (viewMode === "hvac") {
     return /\b(heat pump|air handler|duct|register|exhaust|refrigerant|lineset|ventilation|cooling|heating|condenser)\b/.test(text);
   }
+  if (viewMode === "plumbing") {
+    return /\b(plumbing|water service|hot water|cold water|sanitary|dwv|vent stack|storm drain|condensate|pipe|lavatory|toilet|shower|water closet|backflow|manifold|sump|drain|faucet)\b/.test(text);
+  }
   if (viewMode === "wood-structure") {
     return /\b(engineered wood|wood stud|wood framing|wood stair|wood guard|wood handrail|wood landing|wood backup|sheathing|plywood|osb)\b/.test(text);
   }
   if (viewMode === "load-bearing") {
-    return /\b(foundation|party wall|rear wall|structural backup|floor plate|roof deck|slab|lintel|masonry|cmu|reinforced concrete|load-bearing)\b/.test(text);
+    return /\b(foundation|party wall|rear wall|structural backup|floor plate|roof deck|slab|lintel|masonry|cmu|reinforced concrete|load-bearing|structural steel|steel column|steel beam|steel girder|post and beam)\b/.test(text);
+  }
+  if (viewMode === "structural-demand") {
+    return componentMatchesViewMode(component, "load-bearing");
   }
   if (viewMode === "envelope") {
     return component.metadata.category === "facade"
@@ -118,5 +136,5 @@ export function componentMatchesViewMode(component: ModelComponent, viewMode: Vi
     return component.metadata.category === "site" || component.metadata.category === "landscape" || /\b(stoop|yard|tree|site|pad|landscape)\b/.test(text);
   }
 
-  return component.metadata.category !== "electrical" && !componentMatchesViewMode(component, "hvac");
+  return component.metadata.category !== "electrical" && !componentMatchesViewMode(component, "hvac") && !componentMatchesViewMode(component, "plumbing");
 }

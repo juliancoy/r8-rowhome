@@ -3,6 +3,7 @@ export const sources = {
   residentialCode: "sources/code-building-codes-part-x-international-residential-code-full.html",
   energyCode: "sources/code-building-codes-part-ix-b-residential-energy-code-full.html",
   electricalCode: "sources/code-building-codes-part-iii-national-electrical-code-full.html",
+  plumbingCode: "sources/code-building-codes-part-vi-international-plumbing-code-full.html",
   naturalResources: "sources/code-article-7-natural-resources-full.html",
   completeStreets: "sources/dot-complete-streets-manual-2021-03.pdf",
   biaCurvedBrick: "sources/materials/facade/bia-curved-brick-walls.pdf",
