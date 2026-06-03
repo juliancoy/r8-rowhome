@@ -23,7 +23,7 @@ import { modelGroup } from "./geometry/component";
 import { exportComponentStl, exportModelStl, downloadTextFile } from "./export/stl";
 import { exportModelMetadataJson } from "./export/json";
 import { renderPanels, type PanelTab } from "./ui/panels";
-import { createPreferredRenderer } from "./viewer/renderers";
+import { createPreferredRenderer, toggleRenderer, type RendererMode } from "./viewer/renderers";
 import { componentMatchesViewMode, type ViewMode } from "./viewer/layers";
 import {
   animateFrontDoor,
@@ -599,15 +599,48 @@ function lookDirectionFromAngles(): Vector3 {
 }
 
 async function boot(): Promise<void> {
-  const { renderer, mode } = await createPreferredRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(devicePixelRatio);
-  if (renderer.shadowMap) {
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = PCFSoftShadowMap;
-  }
-  renderMode.textContent = mode;
+  let currentRenderer: import("./viewer/renderers").PreferredRenderer;
+  let currentMode: RendererMode;
 
-  orbitControls = new OrbitControls(camera, renderer.domElement);
+  {
+    const result = await createPreferredRenderer({ canvas, antialias: true });
+    currentRenderer = result.renderer;
+    currentMode = result.mode;
+  }
+  currentRenderer.setPixelRatio(devicePixelRatio);
+  if (currentRenderer.shadowMap) {
+    currentRenderer.shadowMap.enabled = true;
+    currentRenderer.shadowMap.type = PCFSoftShadowMap;
+  }
+  renderMode.textContent = currentMode;
+  renderMode.style.cursor = "pointer";
+  renderMode.title = "Click to toggle renderer";
+
+  renderMode.addEventListener("click", async () => {
+    const nextMode: RendererMode = currentMode === "WebGPU" ? "WebGL2" : "WebGPU";
+    renderMode.textContent = `⟳ ${nextMode}`;
+    try {
+      const result = await toggleRenderer(currentMode, currentRenderer, { canvas, antialias: true });
+      currentRenderer = result.renderer;
+      currentMode = result.mode;
+      currentRenderer.setPixelRatio(devicePixelRatio);
+      if (currentRenderer.shadowMap) {
+        currentRenderer.shadowMap.enabled = true;
+        currentRenderer.shadowMap.type = PCFSoftShadowMap;
+      }
+      orbitControls = new OrbitControls(camera, currentRenderer.domElement);
+      orbitControls.enableRotate = false;
+      orbitControls.enableDamping = true;
+      orbitControls.maxDistance = 180;
+      orbitControls.target.copy(camera.position.clone().add(lookDirectionFromAngles().multiplyScalar(24)));
+      orbitControls.update();
+      renderMode.textContent = currentMode;
+    } catch {
+      renderMode.textContent = currentMode;
+    }
+  });
+
+  orbitControls = new OrbitControls(camera, currentRenderer.domElement);
   orbitControls.enableRotate = false;
   orbitControls.enableDamping = true;
   orbitControls.maxDistance = 180;
@@ -737,12 +770,12 @@ async function boot(): Promise<void> {
   function resize(): void {
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    renderer.setSize(width, height, false);
+    currentRenderer.setSize(width, height, false);
     camera.aspect = width / Math.max(1, height);
     camera.updateProjectionMatrix();
   }
 
-  function renderReviewSheet(rendererInstance: typeof renderer, width: number, height: number): void {
+  function renderReviewSheet(rendererInstance: typeof currentRenderer, width: number, height: number): void {
     const halfWidth = Math.floor(width / 2);
     const halfHeight = Math.floor(height / 2);
     const aspect = halfWidth / Math.max(1, halfHeight);
@@ -782,9 +815,9 @@ async function boot(): Promise<void> {
     orbitControls?.update();
     persistCameraPose(nowMs);
     if (activeInspectionView === "review-sheet") {
-      renderReviewSheet(renderer, canvas.clientWidth, canvas.clientHeight);
+      renderReviewSheet(currentRenderer, canvas.clientWidth, canvas.clientHeight);
     } else {
-      renderer.render(scene, camera);
+      currentRenderer.render(scene, camera);
     }
     requestAnimationFrame(animate);
   }

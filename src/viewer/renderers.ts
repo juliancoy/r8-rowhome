@@ -13,10 +13,20 @@ export type PreferredRenderer = {
     enabled: boolean;
     type: number;
   };
+  dispose?: () => void;
 };
 
-export async function createPreferredRenderer(parameters: WebGLRendererParameters): Promise<{ renderer: PreferredRenderer; mode: "WebGPU" | "WebGL" }> {
-  if ("gpu" in navigator) {
+export type RendererMode = "WebGPU" | "WebGL2";
+
+/**
+ * Create a renderer for the given mode.
+ * WebGL2 is the default; WebGPU is used only when explicitly requested.
+ */
+async function createRendererForMode(
+  parameters: WebGLRendererParameters,
+  mode: RendererMode
+): Promise<{ renderer: PreferredRenderer; mode: RendererMode }> {
+  if (mode === "WebGPU" && "gpu" in navigator) {
     try {
       const module = await import("three/webgpu");
       const RendererClass = module.WebGPURenderer as new (params: WebGLRendererParameters) => PreferredRenderer;
@@ -26,9 +36,30 @@ export async function createPreferredRenderer(parameters: WebGLRendererParameter
       }
       return { renderer, mode: "WebGPU" };
     } catch (error) {
-      console.warn("WebGPU renderer unavailable; falling back to WebGL.", error);
+      console.warn("WebGPU renderer unavailable; falling back to WebGL2.", error);
     }
   }
 
-  return { renderer: new WebGLRenderer(parameters), mode: "WebGL" };
+  return { renderer: new WebGLRenderer(parameters), mode: "WebGL2" };
+}
+
+/**
+ * Create the default renderer (WebGL2).
+ */
+export async function createPreferredRenderer(parameters: WebGLRendererParameters): Promise<{ renderer: PreferredRenderer; mode: RendererMode }> {
+  return createRendererForMode(parameters, "WebGL2");
+}
+
+/**
+ * Toggle between WebGPU and WebGL2.
+ * Disposes the current renderer and creates a new one for the opposite mode.
+ */
+export async function toggleRenderer(
+  currentMode: RendererMode,
+  currentRenderer: PreferredRenderer,
+  parameters: WebGLRendererParameters
+): Promise<{ renderer: PreferredRenderer; mode: RendererMode }> {
+  const nextMode: RendererMode = currentMode === "WebGPU" ? "WebGL2" : "WebGPU";
+  currentRenderer.dispose?.();
+  return createRendererForMode(parameters, nextMode);
 }
