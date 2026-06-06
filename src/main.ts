@@ -42,6 +42,15 @@ import {
 import { buildHouseLighting } from "./viewer/lighting";
 import { buildStructuralDemandOverlay } from "./viewer/structuralOverlay";
 import { attachRealProductModels, syncRealProductModelVisibility } from "./viewer/productModels";
+import {
+  attachOccupantAsset,
+  createOccupantAvatar,
+  occupantRoutes,
+  routeById,
+  updateOccupantAvatar,
+  type OccupantRouteId,
+  type OccupantWalkthroughState
+} from "./viewer/occupantWalkthrough";
 import type { BrickDetailMode, ModelComponent, RowhomeConfig, RowhomeModel, StairImplementation, StructuralSupportScheme, ViewOptions } from "./core/types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -70,6 +79,12 @@ app.innerHTML = `
           </select>
         </label>
         <span id="render-mode">Renderer</span>
+        <label class="toolbar-field toolbar-field-compact" for="walkthrough-route-select">
+          <span>Walk</span>
+          <select id="walkthrough-route-select"></select>
+        </label>
+        <button id="walkthrough-toggle" type="button">Watch Person</button>
+        <button id="walkthrough-follow" type="button">Follow</button>
         <span id="selection">No selection</span>
       </div>
       <canvas id="scene"></canvas>
@@ -112,6 +127,7 @@ app.innerHTML = `
           <kbd data-key-hud="keye">E</kbd>
         </div>
       </div>
+      <div class="walkthrough-hud" id="walkthrough-hud" hidden aria-label="Walkthrough status"></div>
     </section>
     <aside class="panel" id="panel"></aside>
   </main>
@@ -134,7 +150,50 @@ const reviewSheetOverlay = requireElement<HTMLElement>("#review-sheet-overlay");
 const exportModelButton = requireElement<HTMLButtonElement>("#export-model-stl");
 const exportJsonButton = requireElement<HTMLButtonElement>("#export-json");
 const viewPresetSelect = requireElement<HTMLSelectElement>("#view-preset-select");
+const walkthroughRouteSelect = requireElement<HTMLSelectElement>("#walkthrough-route-select");
+const walkthroughToggleButton = requireElement<HTMLButtonElement>("#walkthrough-toggle");
+const walkthroughFollowButton = requireElement<HTMLButtonElement>("#walkthrough-follow");
+const walkthroughHud = requireElement<HTMLElement>("#walkthrough-hud");
 let orbitControls: OrbitControls | null = null;
+
+declare global {
+  interface Window {
+    __r8RowhomeBenchmark?: {
+      getRendererMode: () => RendererMode;
+      setRendererMode: (mode: RendererMode) => Promise<RendererMode>;
+      sampleFrames: (options?: { warmupFrames?: number; sampleFrames?: number }) => Promise<{
+        mode: RendererMode;
+        frames: number;
+        averageFrameMs: number;
+        medianFrameMs: number;
+        p95FrameMs: number;
+        minFrameMs: number;
+        maxFrameMs: number;
+        averageRenderMs: number;
+        medianRenderMs: number;
+        p95RenderMs: number;
+        maxRenderMs: number;
+      }>;
+      sampleRenderCalls: (options?: { warmupCalls?: number; sampleCalls?: number }) => {
+        mode: RendererMode;
+        calls: number;
+        averageRenderMs: number;
+        medianRenderMs: number;
+        p95RenderMs: number;
+        minRenderMs: number;
+        maxRenderMs: number;
+      };
+      getSceneStats: () => {
+        components: number;
+        objects: number;
+        meshes: number;
+        triangles: number;
+        visibleObjects: number;
+      };
+      getRendererInfo: () => unknown;
+    };
+  }
+}
 
 const defaultViewOptions: ViewOptions = {
   invertDragHorizontal: false,
@@ -419,6 +478,24 @@ let houseLights: Group = buildHouseLighting(model, viewOptions.roomLightIntensit
 scene.add(houseLights);
 let structuralDemandOverlay: Group = buildStructuralDemandOverlay(model.structural);
 scene.add(structuralDemandOverlay);
+const occupantAvatar = createOccupantAvatar();
+scene.add(occupantAvatar);
+const occupantAsset = attachOccupantAsset(occupantAvatar);
+const walkthroughState: OccupantWalkthroughState = {
+  enabled: false,
+  paused: false,
+  routeId: "daily-use",
+  elapsedSeconds: 0,
+  speedFtPerSecond: 4.2,
+  followCamera: true
+};
+for (const route of occupantRoutes(currentConfig)) {
+  const option = document.createElement("option");
+  option.value = route.id;
+  option.textContent = route.label;
+  walkthroughRouteSelect.append(option);
+}
+walkthroughRouteSelect.value = walkthroughState.routeId;
 
 const raycaster = new Raycaster();
 const pointer = new Vector2();
@@ -536,6 +613,16 @@ function setActiveCameraPreset(presetId: CameraPresetId | null): void {
   activeCameraPreset = presetId;
 }
 
+function updateWalkthroughControls(progress = 0): void {
+  walkthroughToggleButton.textContent = walkthroughState.enabled && !walkthroughState.paused ? "Pause Person" : "Watch Person";
+  walkthroughToggleButton.classList.toggle("is-active", walkthroughState.enabled);
+  walkthroughFollowButton.classList.toggle("is-active", walkthroughState.followCamera);
+  walkthroughFollowButton.textContent = walkthroughState.followCamera ? "Following" : "Follow";
+  walkthroughHud.hidden = !walkthroughState.enabled;
+  const route = routeById(currentConfig, walkthroughState.routeId);
+  walkthroughHud.textContent = `${route.label}: ${Math.round(progress * 100)}%`;
+}
+
 function rebuildModel(nextConfig: RowhomeConfig): void {
   currentConfig = { ...nextConfig };
   saveStoredAppOptions(currentConfig, viewOptions);
@@ -553,6 +640,7 @@ function rebuildModel(nextConfig: RowhomeConfig): void {
   structuralDemandOverlay = buildStructuralDemandOverlay(model.structural);
   scene.add(structuralDemandOverlay);
   renderPanels(model, panel, currentConfig, activePanelTab, viewOptions);
+  updateWalkthroughControls();
   if (activeCameraPreset) {
     applyCameraPresetPosition(activeCameraPreset);
   }
@@ -616,11 +704,13 @@ async function boot(): Promise<void> {
   renderMode.style.cursor = "pointer";
   renderMode.title = "Click to toggle renderer";
 
-  renderMode.addEventListener("click", async () => {
-    const nextMode: RendererMode = currentMode === "WebGPU" ? "WebGL2" : "WebGPU";
+  async function setRendererMode(nextMode: RendererMode): Promise<RendererMode> {
+    if (nextMode === currentMode) {
+      return currentMode;
+    }
     renderMode.textContent = `⟳ ${nextMode}`;
     try {
-      const result = await toggleRenderer(currentMode, currentRenderer, { canvas, antialias: true });
+      const result = await toggleRenderer(currentMode === nextMode ? (nextMode === "WebGPU" ? "WebGL2" : "WebGPU") : currentMode, currentRenderer, { canvas, antialias: true });
       currentRenderer = result.renderer;
       currentMode = result.mode;
       currentRenderer.setPixelRatio(devicePixelRatio);
@@ -635,9 +725,16 @@ async function boot(): Promise<void> {
       orbitControls.target.copy(camera.position.clone().add(lookDirectionFromAngles().multiplyScalar(24)));
       orbitControls.update();
       renderMode.textContent = currentMode;
+      return currentMode;
     } catch {
       renderMode.textContent = currentMode;
+      return currentMode;
     }
+  }
+
+  renderMode.addEventListener("click", async () => {
+    const nextMode: RendererMode = currentMode === "WebGPU" ? "WebGL2" : "WebGPU";
+    await setRendererMode(nextMode);
   });
 
   orbitControls = new OrbitControls(camera, currentRenderer.domElement);
@@ -656,6 +753,7 @@ async function boot(): Promise<void> {
   let previousFrameMs = performance.now();
   let lastCameraPoseJson = JSON.stringify(storedCameraPose(camera));
   let lastCameraPoseSaveMs = 0;
+  let renderDurationSamples: number[] = [];
 
   function persistCameraPose(nowMs: number, force = false): void {
     const nextCameraPoseJson = JSON.stringify(storedCameraPose(camera));
@@ -675,6 +773,19 @@ async function boot(): Promise<void> {
     const target = camera.position.clone().add(forward.multiplyScalar(24));
     camera.lookAt(target);
     orbitControls?.target.copy(target);
+  }
+
+  function focusCameraOnOccupant(position: Vector3, direction: Vector3): void {
+    if (!walkthroughState.enabled || !walkthroughState.followCamera || activeInspectionView === "review-sheet") {
+      return;
+    }
+    const side = new Vector3(-direction.z, 0, direction.x).normalize();
+    const cameraOffset = direction.clone().multiplyScalar(-9).add(side.multiplyScalar(3.2)).add(new Vector3(0, 4.8, 0));
+    camera.position.lerp(position.clone().add(cameraOffset), 0.08);
+    const target = position.clone().add(new Vector3(0, 2.2, 0)).add(direction.clone().multiplyScalar(4));
+    camera.lookAt(target);
+    orbitControls?.target.lerp(target, 0.12);
+    syncLookAnglesFromCamera();
   }
 
   function setInspectionView(viewId: InspectionViewId, updateHash = true): void {
@@ -812,15 +923,130 @@ async function boot(): Promise<void> {
     resize();
     applyFlyMovement(deltaSeconds);
     animateOpenings(deltaSeconds);
+    const occupantSample = updateOccupantAvatar(
+      occupantAvatar,
+      routeById(currentConfig, walkthroughState.routeId),
+      walkthroughState,
+      deltaSeconds
+    );
+    occupantAsset.update(deltaSeconds);
+    focusCameraOnOccupant(occupantSample.position, occupantSample.direction);
+    updateWalkthroughControls(occupantSample.progress);
     orbitControls?.update();
     persistCameraPose(nowMs);
     if (activeInspectionView === "review-sheet") {
+      const renderStartMs = performance.now();
       renderReviewSheet(currentRenderer, canvas.clientWidth, canvas.clientHeight);
+      renderDurationSamples.push(performance.now() - renderStartMs);
     } else {
+      const renderStartMs = performance.now();
       currentRenderer.render(scene, camera);
+      renderDurationSamples.push(performance.now() - renderStartMs);
+    }
+    if (renderDurationSamples.length > 1000) {
+      renderDurationSamples = renderDurationSamples.slice(-500);
     }
     requestAnimationFrame(animate);
   }
+
+  window.__r8RowhomeBenchmark = {
+    getRendererMode: () => currentMode,
+    setRendererMode,
+    sampleFrames: async (options = {}) => {
+      const warmupFrames = Math.max(0, Math.round(options.warmupFrames ?? 45));
+      const sampleFrames = Math.max(5, Math.round(options.sampleFrames ?? 180));
+      const waitFrame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
+      for (let i = 0; i < warmupFrames; i += 1) {
+        await waitFrame();
+      }
+      renderDurationSamples = [];
+      const samples: number[] = [];
+      let previous = await waitFrame();
+      for (let i = 0; i < sampleFrames; i += 1) {
+        const next = await waitFrame();
+        samples.push(next - previous);
+        previous = next;
+      }
+      const sorted = [...samples].sort((a, b) => a - b);
+      const renderSamples = [...renderDurationSamples].slice(-samples.length);
+      const sortedRenderSamples = [...renderSamples].sort((a, b) => a - b);
+      const quantile = (q: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)))];
+      const renderQuantile = (q: number) => sortedRenderSamples[Math.min(sortedRenderSamples.length - 1, Math.max(0, Math.floor((sortedRenderSamples.length - 1) * q)))] ?? 0;
+      return {
+        mode: currentMode,
+        frames: samples.length,
+        averageFrameMs: samples.reduce((sum, value) => sum + value, 0) / samples.length,
+        medianFrameMs: quantile(0.5),
+        p95FrameMs: quantile(0.95),
+        minFrameMs: sorted[0],
+        maxFrameMs: sorted[sorted.length - 1],
+        averageRenderMs: renderSamples.length > 0 ? renderSamples.reduce((sum, value) => sum + value, 0) / renderSamples.length : 0,
+        medianRenderMs: renderQuantile(0.5),
+        p95RenderMs: renderQuantile(0.95),
+        maxRenderMs: sortedRenderSamples[sortedRenderSamples.length - 1] ?? 0
+      };
+    },
+    sampleRenderCalls: (options = {}) => {
+      const warmupCalls = Math.max(0, Math.round(options.warmupCalls ?? 20));
+      const sampleCalls = Math.max(5, Math.round(options.sampleCalls ?? 120));
+      const renderOnce = () => {
+        const renderStartMs = performance.now();
+        if (activeInspectionView === "review-sheet") {
+          renderReviewSheet(currentRenderer, canvas.clientWidth, canvas.clientHeight);
+        } else {
+          currentRenderer.render(scene, camera);
+        }
+        return performance.now() - renderStartMs;
+      };
+      for (let i = 0; i < warmupCalls; i += 1) {
+        renderOnce();
+      }
+      const samples: number[] = [];
+      for (let i = 0; i < sampleCalls; i += 1) {
+        samples.push(renderOnce());
+      }
+      const sorted = [...samples].sort((a, b) => a - b);
+      const quantile = (q: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)))];
+      return {
+        mode: currentMode,
+        calls: samples.length,
+        averageRenderMs: samples.reduce((sum, value) => sum + value, 0) / samples.length,
+        medianRenderMs: quantile(0.5),
+        p95RenderMs: quantile(0.95),
+        minRenderMs: sorted[0],
+        maxRenderMs: sorted[sorted.length - 1]
+      };
+    },
+    getSceneStats: () => {
+      let objects = 0;
+      let meshes = 0;
+      let triangles = 0;
+      let visibleObjects = 0;
+      scene.traverse((object) => {
+        objects += 1;
+        if (object.visible) {
+          visibleObjects += 1;
+        }
+        if (object instanceof Mesh) {
+          meshes += 1;
+          const indexCount = object.geometry.index?.count;
+          const positionCount = object.geometry.getAttribute("position")?.count ?? 0;
+          triangles += Math.floor((indexCount ?? positionCount) / 3);
+        }
+      });
+      return {
+        components: model.components.length,
+        objects,
+        meshes,
+        triangles,
+        visibleObjects
+      };
+    },
+    getRendererInfo: () => {
+      const maybeRenderer = currentRenderer as typeof currentRenderer & { info?: unknown };
+      return maybeRenderer.info ?? null;
+    }
+  };
 
   window.addEventListener("keydown", (event) => {
     if (isTypingTarget(event.target)) {
@@ -1094,6 +1320,31 @@ async function boot(): Promise<void> {
     if (nextView === "model" || nextView === "gravity-demand" || nextView === "top" || nextView === "front" || nextView === "left" || nextView === "right" || nextView === "back" || nextView === "interior" || nextView === "review-sheet") {
       setInspectionView(nextView);
     }
+  });
+
+  walkthroughRouteSelect.addEventListener("change", () => {
+    walkthroughState.routeId = walkthroughRouteSelect.value as OccupantRouteId;
+    walkthroughState.elapsedSeconds = 0;
+    walkthroughState.enabled = true;
+    walkthroughState.paused = false;
+    setInspectionView("model");
+    updateWalkthroughControls();
+  });
+
+  walkthroughToggleButton.addEventListener("click", () => {
+    if (!walkthroughState.enabled) {
+      walkthroughState.enabled = true;
+      walkthroughState.paused = false;
+      setInspectionView("model");
+    } else {
+      walkthroughState.paused = !walkthroughState.paused;
+    }
+    updateWalkthroughControls();
+  });
+
+  walkthroughFollowButton.addEventListener("click", () => {
+    walkthroughState.followCamera = !walkthroughState.followCamera;
+    updateWalkthroughControls();
   });
 
   window.addEventListener("hashchange", () => {

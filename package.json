@@ -5,16 +5,19 @@
   "type": "module",
   "scripts": {
     "generate:documents": "node scripts/generate-documents-index.mjs",
+    "assets:sketchfab": "python3 scripts/download-sketchfab-assets.py",
     "predev": "npm run generate:documents",
     "dev": "vite --host 0.0.0.0",
     "prebuild": "npm run generate:documents",
     "build": "tsc && vite build",
     "browser:smoke": "python3 scripts/run-browser-smoke.py",
+    "benchmark:renderers": "python3 scripts/run-renderer-benchmark.py",
     "structural:gravity": "node scripts/run-structural-gravity.mjs && vitest run tests/structural-gravity.test.ts",
     "hvac:fem": "node scripts/run-hvac-fem.mjs && vitest run tests/hvac-flow-report.test.ts",
     "plumbing:fluid": "node scripts/run-plumbing-fluid.mjs && vitest run tests/plumbing-flow-report.test.ts",
+    "permit:readiness": "node scripts/run-permit-readiness.mjs && vitest run tests/permit-readiness.test.ts",
+    "livability:walkthrough": "node scripts/run-livability-walkthrough.mjs && vitest run tests/livability-walkthrough.test.ts",
     "preview": "vite preview --host 0.0.0.0",
-    "pretest": "npm run generate:documents",
     "test": "vitest run"
   },
   "dependencies": {

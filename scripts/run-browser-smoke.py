@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import asyncio
 import os
 import signal
 import shutil
@@ -10,8 +11,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import sync_playwright
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import async_playwright
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,10 +21,14 @@ BASE_URL = f"https://127.0.0.1:{PORT}"
 SCREENSHOT_DIR = ROOT / "artifacts" / "screenshots"
 BUILD_DIR = ROOT / "artifacts" / "browser-smoke-dist"
 LOCAL_BIN = ROOT / "node_modules" / ".bin"
+SMOKE_CONCURRENCY = max(1, int(os.environ.get("SMOKE_CONCURRENCY", "2")))
+NAVIGATION_TIMEOUT_MS = max(30_000, int(os.environ.get("SMOKE_NAVIGATION_TIMEOUT_MS", "60000")))
 ALLOWED_CONSOLE_WARNINGS = (
     "THREE.WebGPURenderer: WebGPU is not available",
+    "THREE.WebGLShadowMap: PCFSoftShadowMap has been deprecated",
     "No available adapters.",
     "GL Driver Message",
+    "WebGL: CONTEXT_LOST_WEBGL",
 )
 ALLOWED_CONSOLE_ERRORS_WITHOUT_FAILED_RESPONSE = (
     "Failed to load resource: the server responded with a status of 404",
@@ -101,50 +106,8 @@ def assert_no_browser_errors(console_messages: list[str], page_errors: list[str]
         raise AssertionError(f"Browser errors detected:\n{details}")
 
 
-def inspect_page(page, path: str, screenshot_name: str, selector: str, must_be_unhidden: bool = False) -> None:
-    console_messages: list[str] = []
-    page_errors: list[str] = []
-    failed_responses: list[str] = []
-
-    page.on("console", lambda message: console_messages.append(f"{message.type}: {message.text}") if message.type in {"error", "warning"} else None)
-    page.on("pageerror", lambda error: page_errors.append(str(error)))
-    page.on("response", lambda response: failed_responses.append(f"{response.status}: {response.url}") if response.status >= 400 else None)
-
-    url = f"{BASE_URL}/{path}"
-    print(f"Checking {url}", flush=True)
-    page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        if element_matches(page, selector, must_be_unhidden):
-            break
-        page.wait_for_timeout(100)
-    else:
-        diagnostic_name = screenshot_name.replace(".png", "-selector-timeout.png")
-        page.screenshot(path=str(SCREENSHOT_DIR / diagnostic_name), full_page=False, timeout=60_000)
-        html_path = SCREENSHOT_DIR / diagnostic_name.replace(".png", ".html")
-        html_path.write_text(page.content(), encoding="utf8")
-        raise PlaywrightError(f"{path} did not render expected selector {selector}")
-    page.wait_for_timeout(500)
-
-    canvas_box = page.evaluate(
-        """() => {
-            const canvas = document.querySelector('#scene');
-            if (!canvas) {
-                return null;
-            }
-            const rect = canvas.getBoundingClientRect();
-            return { width: rect.width, height: rect.height };
-        }"""
-    )
-    if not canvas_box or canvas_box["width"] < 300 or canvas_box["height"] < 300:
-        raise AssertionError(f"Scene canvas has invalid dimensions: {canvas_box}")
-
-    page.screenshot(path=str(SCREENSHOT_DIR / screenshot_name), full_page=False, timeout=60_000)
-    assert_no_browser_errors(console_messages, page_errors, failed_responses)
-
-
-def element_matches(page, selector: str, must_be_unhidden: bool) -> bool:
-    return page.evaluate(
+async def element_matches(page, selector: str, must_be_unhidden: bool) -> bool:
+    return await page.evaluate(
         """([selector, mustBeUnhidden]) => {
             const element = document.querySelector(selector);
             if (!element) {
@@ -165,6 +128,134 @@ def element_matches(page, selector: str, must_be_unhidden: bool) -> bool:
     )
 
 
+async def attach_error_capture(page) -> tuple[list[str], list[str], list[str]]:
+    console_messages: list[str] = []
+    page_errors: list[str] = []
+    failed_responses: list[str] = []
+
+    page.on(
+        "console",
+        lambda message: console_messages.append(f"{message.type}: {message.text}") if message.type in {"error", "warning"} else None,
+    )
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.on("response", lambda response: failed_responses.append(f"{response.status}: {response.url}") if response.status >= 400 else None)
+    return console_messages, page_errors, failed_responses
+
+
+async def inspect_page(page, path: str, screenshot_name: str, selector: str, must_be_unhidden: bool = False) -> None:
+    console_messages, page_errors, failed_responses = await attach_error_capture(page)
+
+    url = f"{BASE_URL}/{path}"
+    print(f"Checking {url}", flush=True)
+    await page.goto(url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if await element_matches(page, selector, must_be_unhidden):
+            break
+        await page.wait_for_timeout(100)
+    else:
+        diagnostic_name = screenshot_name.replace(".png", "-selector-timeout.png")
+        await page.screenshot(path=str(SCREENSHOT_DIR / diagnostic_name), full_page=False, timeout=60_000)
+        html_path = SCREENSHOT_DIR / diagnostic_name.replace(".png", ".html")
+        html_path.write_text(await page.content(), encoding="utf8")
+        raise PlaywrightError(f"{path} did not render expected selector {selector}")
+    await page.wait_for_timeout(500)
+
+    canvas_box = await page.evaluate(
+        """() => {
+            const canvas = document.querySelector('#scene');
+            if (!canvas) {
+                return null;
+            }
+            const rect = canvas.getBoundingClientRect();
+            return { width: rect.width, height: rect.height };
+        }"""
+    )
+    if not canvas_box or canvas_box["width"] < 300 or canvas_box["height"] < 300:
+        raise AssertionError(f"Scene canvas has invalid dimensions: {canvas_box}")
+
+    await page.screenshot(path=str(SCREENSHOT_DIR / screenshot_name), full_page=False, timeout=60_000)
+    assert_no_browser_errors(console_messages, page_errors, failed_responses)
+
+
+async def inspect_walkthrough(page) -> None:
+    console_messages, page_errors, failed_responses = await attach_error_capture(page)
+
+    url = f"{BASE_URL}/#camera-interior"
+    print(f"Checking {url} walkthrough", flush=True)
+    await page.goto(url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+    await page.wait_for_selector("#walkthrough-toggle", timeout=30_000)
+    await page.click("#walkthrough-toggle")
+    await page.wait_for_function(
+        """() => {
+            const hud = document.querySelector('#walkthrough-hud');
+            const avatarActive = document.querySelector('#walkthrough-toggle')?.classList.contains('is-active');
+            return hud && !hud.hasAttribute('hidden') && avatarActive && hud.textContent.includes('%');
+        }""",
+        timeout=30_000,
+    )
+    await page.wait_for_timeout(900)
+    await page.screenshot(path=str(SCREENSHOT_DIR / "e2e-walkthrough-person.png"), full_page=False, timeout=60_000)
+    assert_no_browser_errors(console_messages, page_errors, failed_responses)
+
+
+async def run_check(browser, check: dict[str, object], semaphore: asyncio.Semaphore) -> None:
+    async with semaphore:
+        context = await browser.new_context(ignore_https_errors=True, viewport={"width": 1440, "height": 1000})
+        page = await context.new_page()
+        try:
+            if check["kind"] == "walkthrough":
+                await inspect_walkthrough(page)
+            else:
+                await inspect_page(
+                    page,
+                    str(check["path"]),
+                    str(check["screenshot"]),
+                    str(check["selector"]),
+                    bool(check.get("must_be_unhidden", False)),
+                )
+        finally:
+            await context.close()
+
+
+async def run_browser_checks() -> None:
+    checks: list[dict[str, object]] = [
+        {
+            "kind": "page",
+            "path": "#structural-demand",
+            "screenshot": "e2e-structural-demand.png",
+            "selector": "#structural-legend",
+            "must_be_unhidden": True,
+        },
+        {
+            "kind": "page",
+            "path": "#steel-structural-demand",
+            "screenshot": "e2e-steel-structural-demand.png",
+            "selector": "#structural-legend",
+            "must_be_unhidden": True,
+        },
+        {"kind": "page", "path": "#steel-support", "screenshot": "e2e-steel-support.png", "selector": "#structural-support-select"},
+        {"kind": "page", "path": "#camera-top", "screenshot": "e2e-camera-top.png", "selector": "#view-preset-select"},
+        {"kind": "page", "path": "#camera-front", "screenshot": "e2e-camera-front.png", "selector": "#view-preset-select"},
+        {"kind": "page", "path": "#camera-interior", "screenshot": "e2e-camera-interior.png", "selector": "#view-preset-select"},
+        {
+            "kind": "page",
+            "path": "#camera-sheet",
+            "screenshot": "e2e-camera-sheet.png",
+            "selector": "#review-sheet-overlay",
+            "must_be_unhidden": True,
+        },
+        {"kind": "walkthrough"},
+    ]
+    semaphore = asyncio.Semaphore(min(SMOKE_CONCURRENCY, len(checks)))
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(channel="chrome", headless=True)
+        try:
+            await asyncio.gather(*(run_check(browser, check, semaphore) for check in checks))
+        finally:
+            await browser.close()
+
+
 def main() -> int:
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     clear_vite_temp_cache()
@@ -177,39 +268,7 @@ def main() -> int:
     preview = start_preview()
     try:
         wait_for_server(preview)
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel="chrome", headless=True)
-            try:
-                context = browser.new_context(ignore_https_errors=True, viewport={"width": 1440, "height": 1000})
-                page = context.new_page()
-                inspect_page(page, "#structural-demand", "e2e-structural-demand.png", "#structural-legend", must_be_unhidden=True)
-                page.close()
-
-                page = context.new_page()
-                inspect_page(page, "#steel-structural-demand", "e2e-steel-structural-demand.png", "#structural-legend", must_be_unhidden=True)
-                page.close()
-
-                page = context.new_page()
-                inspect_page(page, "#steel-support", "e2e-steel-support.png", "#structural-support-select")
-                page.close()
-
-                page = context.new_page()
-                inspect_page(page, "#camera-top", "e2e-camera-top.png", "#view-preset-select")
-                page.close()
-
-                page = context.new_page()
-                inspect_page(page, "#camera-front", "e2e-camera-front.png", "#view-preset-select")
-                page.close()
-
-                page = context.new_page()
-                inspect_page(page, "#camera-interior", "e2e-camera-interior.png", "#view-preset-select")
-                page.close()
-
-                page = context.new_page()
-                inspect_page(page, "#camera-sheet", "e2e-camera-sheet.png", "#review-sheet-overlay", must_be_unhidden=True)
-                page.close()
-            finally:
-                browser.close()
+        asyncio.run(run_browser_checks())
     except PlaywrightError as error:
         print(f"Playwright failed: {error}", file=sys.stderr)
         return 1

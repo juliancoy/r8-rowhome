@@ -99,6 +99,10 @@ describe("rowhome generator", () => {
     expect(ids.has("water-heater-branch-circuit")).toBe(true);
     expect(ids.has("heat-pump-condenser")).toBe(true);
     expect(ids.has("air-handler")).toBe(true);
+    expect(ids.has("floor-1-heat-pump-indoor-unit")).toBe(true);
+    expect(ids.has("floor-2-heat-pump-indoor-unit")).toBe(true);
+    expect(ids.has("floor-3-heat-pump-indoor-unit")).toBe(true);
+    expect(ids.has("floor-1-thermostat")).toBe(true);
     expect(ids.has("supply-plenum")).toBe(true);
     expect(ids.has("return-plenum")).toBe(true);
     expect(ids.has("supply-branch-front-1")).toBe(true);
@@ -109,7 +113,7 @@ describe("rowhome generator", () => {
     expect(model.components.some((component) => component.metadata.material.includes("hollow"))).toBe(true);
   });
 
-  it("models HVAC ducts as hollow connected flow segments for thermofluid analysis", () => {
+  it("models HVAC ducts as hollow connected airflow segments without treating ducts as heat-flow paths", () => {
     const model = generateRowhome(defaultRowhomeConfig);
     const ductComponents = model.components.filter((component) => component.object.userData.hvac?.hollow === true);
     const flowEdges = ductComponents.map((component) => component.object.userData.hvac as {
@@ -129,7 +133,7 @@ describe("rowhome generator", () => {
     expect(flowEdges.every((edge) => (edge.flowCfm ?? 0) > 0)).toBe(true);
     expect(flowEdges.every((edge) => (edge.hydraulicAreaSqFt ?? 0) > 0)).toBe(true);
     expect(flowEdges.every((edge) => (edge.innerWidthFt ?? 0) > 0 && (edge.innerHeightFt ?? 0) > 0 && (edge.wallThicknessFt ?? 0) > 0)).toBe(true);
-    expect(flowEdges.some((edge) => edge.from === "supply-plenum" && edge.to === "supply-trunk-1-end")).toBe(true);
+    expect(flowEdges.some((edge) => edge.from === "supply-plenum" && edge.to === "supply-trunk-1")).toBe(true);
     expect(flowEdges.some((edge) => edge.from === "range-hood" && edge.to === "rear-wall-exhaust-termination")).toBe(true);
     expect(ductComponents.some((component) => component.metadata.material.includes("low-leakage galvanized sheet-metal rectangular supply duct"))).toBe(true);
     expect(ductComponents.some((component) => component.metadata.material.includes("smooth-wall rigid metal range hood exhaust duct"))).toBe(true);
@@ -197,12 +201,19 @@ describe("rowhome generator", () => {
     const racks = model.components.filter((component) => component.metadata.id.startsWith("roof-solar-rack-") || component.metadata.id.startsWith("roof-solar-rear-rack-"));
     const combiner = model.components.find((component) => component.metadata.id === "roof-solar-combiner");
     const raceway = model.components.find((component) => component.metadata.id === "roof-solar-dc-raceway");
+    const battery = model.components.find((component) => component.metadata.id === "lithium-ion-battery");
+    const inverter = model.components.find((component) => component.metadata.id === "pv-hybrid-inverter");
+    const interconnection = model.components.find((component) => component.metadata.id === "pv-battery-ac-interconnection");
     const buildingHeight = defaultRowhomeConfig.stories * defaultRowhomeConfig.storyHeightFt;
 
     expect(panels.length).toBe(9);
     expect(racks.length).toBe(18);
     expect(combiner?.metadata.material).toContain("photovoltaic");
     expect(raceway?.metadata.material).toContain("photovoltaic");
+    expect(battery?.metadata.material).toContain("lithium-ion");
+    expect(battery?.metadata.notes?.some((note) => note.includes("storing photovoltaic charge"))).toBe(true);
+    expect(inverter?.metadata.notes?.some((note) => note.includes("lithium-ion-battery"))).toBe(true);
+    expect(interconnection?.metadata.notes?.some((note) => note.includes("electrical-panel"))).toBe(true);
     for (const panel of panels) {
       panel.object.updateMatrixWorld(true);
       const bounds = new Box3().setFromObject(panel.object);
@@ -211,6 +222,37 @@ describe("rowhome generator", () => {
       expect(bounds.min.z).toBeGreaterThan(5.0);
       expect(bounds.max.z).toBeLessThan(25.5);
       expect(bounds.min.y).toBeGreaterThan(buildingHeight + 0.3);
+    }
+  });
+
+  it("places a raised roof garden next to the solar array without overlapping panels", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const panels = model.components.filter((component) => component.metadata.id.startsWith("roof-solar-panel-"));
+    const gardenParts = model.components.filter((component) => component.metadata.id.startsWith("roof-garden-"));
+    const planters = gardenParts.filter((component) => component.metadata.id.startsWith("roof-garden-planter-"));
+    const planting = gardenParts.filter((component) => component.metadata.id.startsWith("roof-garden-planting-"));
+    const walkway = model.components.find((component) => component.metadata.id === "roof-garden-paver-walkway");
+    const irrigation = model.components.find((component) => component.metadata.id === "roof-garden-drip-irrigation");
+    const reviewZone = model.components.find((component) => component.metadata.id === "roof-garden-load-review-zone");
+    const buildingHeight = defaultRowhomeConfig.stories * defaultRowhomeConfig.storyHeightFt;
+
+    expect(planters).toHaveLength(3);
+    expect(planting).toHaveLength(3);
+    expect(walkway?.metadata.material).toContain("paver");
+    expect(irrigation?.metadata.material).toContain("drip irrigation");
+    expect(reviewZone?.metadata.printable).toBe(false);
+    expect(gardenParts.every((component) => component.metadata.notes?.some((note) => note.includes("next to the photovoltaic array")))).toBe(true);
+
+    const panelBounds = panels.map((panel) => {
+      panel.object.updateMatrixWorld(true);
+      return new Box3().setFromObject(panel.object);
+    });
+    for (const gardenPart of gardenParts) {
+      gardenPart.object.updateMatrixWorld(true);
+      const gardenBounds = new Box3().setFromObject(gardenPart.object);
+      expect(gardenBounds.min.y).toBeGreaterThan(buildingHeight + 0.45);
+      expect(gardenBounds.max.x).toBeLessThan(5.15);
+      expect(panelBounds.every((bounds) => !bounds.intersectsBox(gardenBounds))).toBe(true);
     }
   });
 

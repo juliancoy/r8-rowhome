@@ -16,6 +16,8 @@ import { addStandardPlumbingSystem } from "./plumbing";
 import { buildStructuralModel } from "../structure/gravity";
 import { addSteelSupportSystem } from "./steelSupport";
 import { addRoofSolarArray } from "./solar";
+import { addRoofGarden } from "./roofGarden";
+import { attachRealAsset } from "./realAssets";
 import { addBrickCountSummary, addInstancedBrickWall, brickCountForWall, standardBrick } from "./brickwork";
 
 function rowhomeCount(config: RowhomeConfig): number {
@@ -638,6 +640,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
     addSteelSupportSystem(components, config, buildingHeight);
   }
   addRoofSolarArray(components, config, buildingHeight);
+  addRoofGarden(components, config, buildingHeight);
 
   box(
     components,
@@ -884,7 +887,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
 
   box(
     components,
-    metadata("living-room-couch", "Living room couch", "interior", "upholstered sofa", sources.plan, 1800),
+    attachRealAsset(metadata("living-room-couch", "Living room couch", "interior", "upholstered sofa", sources.plan, 1800), "loungeSofa", "Lounge sofa"),
     "#4f6f77",
     7.0,
     3.0,
@@ -893,7 +896,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   );
   box(
     components,
-    metadata("living-room-coffee-table", "Living room coffee table", "interior", "wood coffee table", sources.plan, 450),
+    attachRealAsset(metadata("living-room-coffee-table", "Living room coffee table", "interior", "wood coffee table", sources.plan, 450), "tableCoffee", "Coffee table"),
     "#7b5736",
     4.2,
     2.1,
@@ -902,7 +905,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   );
   box(
     components,
-    metadata("living-room-tv", "Wall mounted TV", "interior", "television", sources.plan, 900),
+    attachRealAsset(metadata("living-room-tv", "Wall mounted TV", "interior", "television", sources.plan, 900), "televisionModern", "Modern television"),
     "#111315",
     5.0,
     0.16,
@@ -949,7 +952,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   ] as const) {
     box(
       components,
-      metadata(id, name, "interior", "bed frame and mattress", sources.plan, 1400),
+      attachRealAsset(metadata(id, name, "interior", "bed frame and mattress", sources.plan, 1400), id === "second-bedroom-bed" ? "bedSingle" : "bedDouble", id === "second-bedroom-bed" ? "Single bed" : "Double bed"),
       "#c9d2d8",
       5.0,
       6.6,
@@ -971,7 +974,44 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
 
   box(
     components,
-    metadata("kitchen-base-cabinets", "Kitchen base cabinets", "interior", "cabinetry", sources.electricalCode, 7600),
+    attachRealAsset(metadata("office-desk", "Third floor office desk", "interior", "office desk", sources.plan, 780), "desk", "Desk"),
+    "#8b6844",
+    4.6,
+    2.2,
+    2.6,
+    { x: 9.5, y: 34.0, z: 2 * config.storyHeightFt + 1.3 }
+  );
+  box(
+    components,
+    attachRealAsset(metadata("office-chair", "Third floor office chair", "interior", "desk chair", sources.plan, 360), "chairDesk", "Desk chair"),
+    "#59636d",
+    2.1,
+    2.1,
+    3.2,
+    { x: 9.5, y: 31.6, z: 2 * config.storyHeightFt + 1.6 }
+  );
+  box(
+    components,
+    attachRealAsset(metadata("office-computer-screen", "Third floor office computer screen", "interior", "computer monitor", sources.plan, 260), "computerScreen", "Computer screen"),
+    "#111315",
+    1.7,
+    0.16,
+    1.2,
+    { x: 9.5, y: 33.0, z: 2 * config.storyHeightFt + 3.0 }
+  );
+  box(
+    components,
+    attachRealAsset(metadata("office-keyboard", "Third floor office keyboard", "interior", "computer keyboard", sources.plan, 95), "computerKeyboard", "Computer keyboard"),
+    "#262c31",
+    1.5,
+    0.55,
+    0.12,
+    { x: 9.5, y: 32.75, z: 2 * config.storyHeightFt + 2.72 }
+  );
+
+  box(
+    components,
+    attachRealAsset(metadata("kitchen-base-cabinets", "Kitchen base cabinets", "interior", "cabinetry", sources.electricalCode, 7600), "kitchenCabinet", "Kitchen cabinet"),
     "#d8ca9c",
     7.0,
     5.5,
@@ -980,7 +1020,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   );
   box(
     components,
-    metadata("kitchen-island", "Kitchen island", "interior", "cabinetry and countertop", sources.plan, 5200),
+    attachRealAsset(metadata("kitchen-island", "Kitchen island", "interior", "cabinetry and countertop", sources.plan, 5200), "kitchenCabinetDrawer", "Kitchen cabinet drawer"),
     "#c3b07a",
     5.8,
     2.8,
@@ -989,7 +1029,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   );
   box(
     components,
-    metadata("electric-range", "Electric range and oven", "interior", "electric appliance", sources.electricalCode, 2400),
+    attachRealAsset(metadata("electric-range", "Electric range and oven", "interior", "electric appliance", sources.electricalCode, 2400), "kitchenStoveElectric", "Electric kitchen stove"),
     "#2b3034",
     2.6,
     2.4,
@@ -1031,7 +1071,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   );
   box(
     components,
-    metadata("kitchen-sink", "Kitchen sink", "interior", "sink and faucet", sources.plan, 1200),
+    attachRealAsset(metadata("kitchen-sink", "Kitchen sink", "interior", "sink and faucet", sources.plan, 1200), "kitchenSink", "Kitchen sink"),
     "#cbd5d8",
     2.4,
     1.5,

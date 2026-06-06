@@ -32,7 +32,7 @@ function duct(components: ModelComponent[], spec: FlowDuctSpec): void {
       650,
       true,
       [
-        "Hollow sheet-metal duct modeled with interior flow area for downstream thermofluid/FEM meshing.",
+        "Hollow sheet-metal duct modeled with interior airflow area for downstream duct-network preflight checks.",
         `flow-node-from:${spec.from}`,
         `flow-node-to:${spec.to}`,
         `design-flow-cfm:${spec.flowCfm}`,
@@ -68,8 +68,9 @@ export function addStandardHvacSystem(
   const w = config.buildingWidthFt;
   const d = config.buildingDepthFt;
   const notes = [
-    "All-electric heat-pump HVAC system with explicit supply, return, and exhaust flow paths.",
-    "Ducts are hollow sheet-metal assemblies with flow-node metadata for FEM/CFD pre-processing.",
+    "All-electric zoned heat-pump HVAC system with explicit supply, return, exhaust, and per-floor heating-zone equipment.",
+    "Ducts are hollow sheet-metal assemblies with airflow-node metadata only; they do not represent conductive/radiant heat flow through the house.",
+    "Room heat gain/loss is a separate envelope and Manual J problem; final loads, heat transfer, controls, and balancing require professional mechanical design.",
     "Supply and return duct mains are modeled as insulated low-leakage galvanized sheet-metal ducts; exhaust paths are modeled as smooth-wall metal ductwork."
   ];
 
@@ -93,7 +94,7 @@ export function addStandardHvacSystem(
   );
   box(
     components,
-    metadata("air-handler", "Indoor electric air handler", "systems", "electric air handler with supply and return plenums", sources.residentialCode, 5200, true, [...notes, "flow-node:air-handler"]),
+    metadata("air-handler", "Indoor electric air handler", "systems", "electric air handler with supply and return plenums for ventilation and air distribution", sources.residentialCode, 5200, true, [...notes, "flow-node:air-handler"]),
     "#6e7780",
     2.8,
     2.2,
@@ -130,8 +131,42 @@ export function addStandardHvacSystem(
 
   for (let floor = 0; floor < config.stories; floor += 1) {
     const level = floor + 1;
+    const floorBaseZ = floor * config.storyHeightFt;
     const supplyZ = floor * config.storyHeightFt + 8.2;
     const returnZ = supplyZ - 0.85;
+    const zoneNotes = [
+      ...notes,
+      `heating-zone-floor:${level}`,
+      `connected to floor-${level}-thermostat and refrigerant-lineset`,
+      "Per-floor heater/fan-coil represents zoned electric heat-pump heating; duct airflow metadata is not used as a heat-transfer calculation."
+    ];
+    box(
+      components,
+      metadata(`floor-${level}-heat-pump-indoor-unit`, `Floor ${level} electric heat-pump indoor heating unit`, "systems", "wall-mounted electric heat-pump indoor unit for independent floor heating zone", sources.residentialCode, 2400, true, zoneNotes),
+      "#f2f5f6",
+      2.6,
+      0.45,
+      0.8,
+      { x: w - 1.15, y: level === 1 ? 15.0 : 18.0, z: floorBaseZ + 7.0 }
+    );
+    box(
+      components,
+      metadata(`floor-${level}-thermostat`, `Floor ${level} heating zone thermostat`, "systems", "programmable thermostat for independent floor heating control", sources.residentialCode, 260, true, zoneNotes),
+      "#eef2f4",
+      0.42,
+      0.08,
+      0.55,
+      { x: w - 0.62, y: level === 1 ? 18.0 : 21.0, z: floorBaseZ + 4.4 }
+    );
+    box(
+      components,
+      metadata(`floor-${level}-heating-control-cable`, `Floor ${level} heating control cable`, "systems", "low-voltage heat-pump control cable", sources.residentialCode, 120, true, zoneNotes),
+      "#65b7c6",
+      0.06,
+      3.0,
+      0.06,
+      { x: w - 0.82, y: level === 1 ? 16.5 : 19.5, z: floorBaseZ + 5.6 }
+    );
     duct(components, {
       id: `supply-trunk-${level}`,
       name: `Hollow supply duct trunk floor ${level}`,
@@ -144,7 +179,7 @@ export function addStandardHvacSystem(
       center: { x: 6.2, y: d / 2, z: supplyZ },
       axis: "y",
       from: floor === 0 ? "supply-plenum" : `supply-riser-${level}`,
-      to: `supply-trunk-${level}-end`,
+      to: `supply-trunk-${level}`,
       flowCfm: floor === 0 ? 520 : 360,
       designVelocityFpm: 720
     });
@@ -177,7 +212,7 @@ export function addStandardHvacSystem(
         center: { x: 6.2, y: d - 7.8, z: floor * config.storyHeightFt + config.storyHeightFt / 2 },
         axis: "z",
         from: floor === 1 ? "supply-plenum" : `supply-riser-${level - 1}`,
-        to: `supply-trunk-${level}`,
+        to: `supply-riser-${level}`,
         flowCfm: 360,
         designVelocityFpm: 700
       });
@@ -192,7 +227,7 @@ export function addStandardHvacSystem(
         wallThickness: 0.035,
         center: { x: 11.8, y: d - 6.2, z: floor * config.storyHeightFt + config.storyHeightFt / 2 },
         axis: "z",
-        from: `return-trunk-${level}`,
+        from: `return-riser-${level}`,
         to: floor === 1 ? "return-plenum" : `return-riser-${level - 1}`,
         flowCfm: 360,
         designVelocityFpm: 650

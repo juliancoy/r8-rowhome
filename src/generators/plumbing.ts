@@ -2,6 +2,7 @@ import type { ModelComponent, RowhomeConfig } from "../core/types";
 import { sources } from "../core/sources";
 import { makeHollowPipeComponent, type PipeAxis } from "../geometry/component";
 import { box, metadata } from "./builder";
+import { attachRealAsset } from "./realAssets";
 
 type PlumbingSystem = "cold-water" | "hot-water" | "sanitary-dwv" | "vent" | "storm" | "condensate";
 
@@ -78,25 +79,116 @@ export function addStandardPlumbingSystem(
   ];
   const fixtureNotes = [...notes, "Fixture is connected to potable supply and/or DWV piping by named flow nodes."];
 
-  for (const [id, name, x, y, z] of [
-    ["bath-1-toilet", "First floor water closet", 13.6, 28.2, 1.35],
-    ["bath-1-lavatory", "First floor lavatory", 15.2, 27.0, 2.7],
-    ["bath-1-shower", "First floor shower pan", 15.0, 30.0, 0.3],
-    ["bath-2-toilet", "Second floor water closet", 13.6, 28.2, 11.35],
-    ["bath-2-lavatory", "Second floor lavatory", 15.2, 27.0, 12.7],
-    ["bath-2-shower", "Second floor shower pan", 15.0, 30.0, 10.3],
-    ["bath-3-toilet", "Third floor water closet", 13.6, 28.2, 21.35],
-    ["bath-3-lavatory", "Third floor lavatory", 15.2, 27.0, 22.7],
-    ["bath-3-shower", "Third floor shower pan", 15.0, 30.0, 20.3]
+  for (let floor = 0; floor < config.stories; floor += 1) {
+    const level = floor + 1;
+    const baseZ = floor * config.storyHeightFt;
+    const bathroomNotes = [
+      ...fixtureNotes,
+      `bathroom-level:${level}`,
+      "Bathroom zone includes toilet, lavatory, shower, door, and schematic clearances for occupant walk-through simulation.",
+      "Final bathroom layout, waterproofing, ventilation, fixture clearances, accessibility, blocking, and door swing require architectural/plumbing review."
+    ];
+    box(
+      components,
+      metadata(`bath-${level}-room-zone`, `Bathroom room zone floor ${level}`, "interior", "bathroom room zone marker", sources.residentialCode, 0, false, bathroomNotes),
+      "#4b6d7a",
+      4.9,
+      6.4,
+      0.08,
+      { x: 14.3, y: 28.6, z: baseZ + 0.5 }
+    );
+    box(
+      components,
+      metadata(`bath-${level}-door`, `Bathroom privacy door floor ${level}`, "interior", "swinging bathroom privacy door", sources.residentialCode, 520, true, [...bathroomNotes, "door-clear-width-ft:2.5"]),
+      "#8a6245",
+      2.55,
+      0.16,
+      6.8,
+      { x: 11.85, y: 27.25, z: baseZ + 3.4 }
+    );
+    box(
+      components,
+      metadata(`bath-${level}-door-swing-clearance`, `Bathroom door swing clearance floor ${level}`, "interior", "non-printable bathroom door swing clearance marker", sources.residentialCode, 0, false, bathroomNotes),
+      "#8fc3dd",
+      2.8,
+      2.8,
+      0.05,
+      { x: 12.55, y: 27.25, z: baseZ + 0.58 }
+    );
+    box(
+      components,
+      metadata(`bath-${level}-toilet-clearance`, `Toilet use clearance floor ${level}`, "interior", "non-printable toilet front and side clearance marker", sources.residentialCode, 0, false, bathroomNotes),
+      "#b6d7a8",
+      2.6,
+      2.5,
+      0.05,
+      { x: 13.6, y: 26.9, z: baseZ + 0.62 }
+    );
+    box(
+      components,
+      metadata(`bath-${level}-shower-clearance`, `Shower entry clearance floor ${level}`, "interior", "non-printable shower entry clearance marker", sources.residentialCode, 0, false, bathroomNotes),
+      "#b6d7a8",
+      2.8,
+      2.2,
+      0.05,
+      { x: 14.9, y: 31.9, z: baseZ + 0.62 }
+    );
+  }
+
+  for (const [id, name, x, y, z, assetSlug, productName] of [
+    ["bath-1-toilet", "First floor water closet", 13.6, 28.2, 1.35, "toilet", "Toilet"],
+    ["bath-1-lavatory", "First floor lavatory", 15.2, 27.0, 2.7, "bathroomSink", "Bathroom sink"],
+    ["bath-1-shower", "First floor shower pan", 15.0, 30.0, 0.3, "shower", "Shower"],
+    ["bath-2-toilet", "Second floor water closet", 13.6, 28.2, 11.35, "toilet", "Toilet"],
+    ["bath-2-lavatory", "Second floor lavatory", 15.2, 27.0, 12.7, "bathroomSink", "Bathroom sink"],
+    ["bath-2-shower", "Second floor shower pan", 15.0, 30.0, 10.3, "shower", "Shower"],
+    ["bath-3-toilet", "Third floor water closet", 13.6, 28.2, 21.35, "toilet", "Toilet"],
+    ["bath-3-lavatory", "Third floor lavatory", 15.2, 27.0, 22.7, "bathroomSink", "Bathroom sink"],
+    ["bath-3-shower", "Third floor shower pan", 15.0, 30.0, 20.3, "shower", "Shower"]
   ] as const) {
     box(
       components,
-      metadata(id, name, "systems", id.includes("toilet") ? "vitreous china plumbing fixture" : id.includes("lavatory") ? "lavatory sink and faucet" : "shower receptor and mixing valve", sources.plumbingCode, 650, true, fixtureNotes),
+      attachRealAsset(
+        metadata(id, name, "systems", id.includes("toilet") ? "vitreous china plumbing fixture" : id.includes("lavatory") ? "lavatory sink and faucet" : "shower receptor and mixing valve", sources.plumbingCode, 650, true, fixtureNotes),
+        assetSlug,
+        productName
+      ),
       id.includes("toilet") ? "#f4f1ea" : "#dbe6ea",
       id.includes("shower") ? 2.7 : 1.5,
       id.includes("shower") ? 2.7 : 1.2,
       id.includes("shower") ? 0.35 : 1.6,
       { x, y, z }
+    );
+  }
+
+  for (let floor = 0; floor < config.stories; floor += 1) {
+    const level = floor + 1;
+    const baseZ = floor * config.storyHeightFt;
+    box(
+      components,
+      attachRealAsset(
+        metadata(`bath-${level}-mirror`, `Bathroom mirror floor ${level}`, "interior", "wall-mounted bathroom mirror", sources.residentialCode, 240, true, fixtureNotes),
+        "bathroomMirror",
+        "Bathroom mirror"
+      ),
+      "#b9d3df",
+      1.6,
+      0.08,
+      2.0,
+      { x: 15.2, y: 26.36, z: baseZ + 4.4 }
+    );
+    box(
+      components,
+      attachRealAsset(
+        metadata(`bath-${level}-cabinet`, `Bathroom storage cabinet floor ${level}`, "interior", "bathroom storage cabinet", sources.residentialCode, 620, true, fixtureNotes),
+        "bathroomCabinet",
+        "Bathroom cabinet"
+      ),
+      "#d8d2c3",
+      1.45,
+      0.55,
+      2.2,
+      { x: 12.45, y: 29.9, z: baseZ + 3.0 }
     );
   }
 
@@ -146,7 +238,7 @@ export function addStandardPlumbingSystem(
   }
 
   pipe(components, { id: "sanitary-building-drain", name: "Sanitary building drain to public sewer", system: "sanitary-dwv", material: "hollow PVC sanitary building drain pipe", color: "#5f6570", nominalDiameterIn: 4, outerDiameterIn: 4.5, wallThicknessIn: 0.12, length: 12.0, center: { x: 13.4, y: 20.0, z: -7.2 }, axis: "y", from: "soil-stack-base", to: "public-sanitary-sewer", drainageFixtureUnits: 24, slopePercent: 2 });
-  pipe(components, { id: "soil-stack", name: "Main soil and waste stack", system: "sanitary-dwv", material: "hollow PVC DWV soil stack", color: "#6c727a", nominalDiameterIn: 3, outerDiameterIn: 3.5, wallThicknessIn: 0.12, length: buildingHeight + config.basementDepthFt, center: { x: 13.4, y: 28.2, z: (buildingHeight - config.basementDepthFt) / 2 }, axis: "z", from: "soil-stack-base", to: "vent-stack", drainageFixtureUnits: 24, slopePercent: 0 });
+  pipe(components, { id: "soil-stack", name: "Main soil and waste stack", system: "sanitary-dwv", material: "hollow PVC DWV soil stack", color: "#6c727a", nominalDiameterIn: 3, outerDiameterIn: 3.5, wallThicknessIn: 0.12, length: buildingHeight + config.basementDepthFt, center: { x: 13.4, y: 28.2, z: (buildingHeight - config.basementDepthFt) / 2 }, axis: "z", from: "soil-stack", to: "soil-stack-base", drainageFixtureUnits: 24, slopePercent: 0 });
   pipe(components, { id: "vent-stack-through-roof", name: "Plumbing vent stack through roof", system: "vent", material: "hollow PVC plumbing vent pipe", color: "#8e9499", nominalDiameterIn: 2, outerDiameterIn: 2.375, wallThicknessIn: 0.1, length: buildingHeight + 2.0, center: { x: 13.9, y: 28.0, z: buildingHeight / 2 + 1.0 }, axis: "z", from: "vent-stack", to: "roof-vent-terminal", drainageFixtureUnits: 0, slopePercent: 0 });
   for (const [fixture, x, y, z, dfu] of [
     ["kitchen-sink", 12.2, 35.4, 2.2, 2],

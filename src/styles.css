@@ -74,6 +74,10 @@ button {
   padding-right: 8px;
 }
 
+.toolbar-field-compact {
+  grid-template-columns: auto minmax(130px, 170px);
+}
+
 .toolbar-field span {
   margin: 0;
   color: #d8e1e6;
@@ -174,6 +178,26 @@ button {
   border-radius: 6px;
   background: rgba(14, 19, 22, 0.86);
   padding: 10px;
+}
+
+.walkthrough-hud {
+  position: absolute;
+  left: 14px;
+  bottom: 88px;
+  z-index: 2;
+  min-width: 220px;
+  max-width: min(360px, calc(100% - 28px));
+  border: 1px solid #3b4851;
+  border-radius: 6px;
+  background: rgba(14, 19, 22, 0.9);
+  color: #edf1f3;
+  padding: 10px 12px;
+  pointer-events: none;
+  font-size: 13px;
+}
+
+.walkthrough-hud[hidden] {
+  display: none;
 }
 
 .key-grid {

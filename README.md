@@ -6,6 +6,8 @@ The app uses TypeScript, Vite, Three.js, and a WebGPU-first renderer with WebGL 
 
 The output is not a permit set, construction document, or substitute for review by licensed Maryland professionals.
 
+See [`legal_procedure.md`](legal_procedure.md) for the legal/buildability procedure and current construction boundary.
+
 ## Install
 
 ```sh
@@ -24,6 +26,25 @@ npm run dev
 npm test
 npm run build
 ```
+
+## Engineering Process Docs
+
+The engineering subprocess documentation lives in `docs/engineering/`:
+
+- Architecture and program
+- Structural gravity
+- Envelope, fire, and energy
+- Electrical
+- HVAC
+- Plumbing
+- Site and streetscape
+- Cost and bill of materials
+- Validation and QA
+- Rendering and browser performance
+- Artifacts and releases
+- Permit and professional review
+
+Start with [`docs/engineering/README.md`](docs/engineering/README.md).
 
 ## Current Scope
 

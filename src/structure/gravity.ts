@@ -44,8 +44,8 @@ function demandPsf(demandKips: number, areaSqFt: number): number {
   return round((demandKips * 1000) / Math.max(1, areaSqFt), 1);
 }
 
-function cumulativeStoryFactor(storyIndex: number, totalStories: number): number {
-  return (totalStories - storyIndex) / Math.max(1, totalStories);
+function cumulativeHeightFactor(zMidFt: number, buildingHeightFt: number): number {
+  return Math.max(0, Math.min(1, (buildingHeightFt - zMidFt) / Math.max(1, buildingHeightFt)));
 }
 
 function stairOpeningArea(config: RowhomeConfig): number {
@@ -558,29 +558,50 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
     { id: "rear-wall-demand", label: "Rear wall demand", xMin: 0, xMax: totalBuildingWidthFt, yMin: config.buildingDepthFt, yMax: config.buildingDepthFt + 0.36, share: 0.18 },
     { id: "front-facade-demand", label: "Front facade demand", xMin: 0, xMax: totalBuildingWidthFt, yMin: -0.36, yMax: 0, share: 0.14 }
   ]) {
-    const wallSpanFt = wall.xMax - wall.xMin + wall.yMax - wall.yMin;
-    for (let story = 0; story < config.stories; story += 1) {
-      const storyFactor = cumulativeStoryFactor(story, config.stories);
-      const segmentArea = Math.max(1, wallSpanFt * config.storyHeightFt);
-      const demandKips = round(wallDeadLoadKips * wall.share * storyFactor);
-      rawDemandSurfaces.push({
-        id: `${wall.id}-story-${story + 1}`,
-        label: `${wall.label} story ${story + 1} support demand`,
-        kind: "wall-line",
-        demandKips,
-        areaSqFt: round(segmentArea),
-        demandPsf: demandPsf(demandKips, segmentArea),
-        bounds: {
-          xMinFt: wall.xMin,
-          xMaxFt: wall.xMax,
-          yMinFt: wall.yMin,
-          yMaxFt: wall.yMax,
-          zMinFt: story * config.storyHeightFt,
-          zMaxFt: (story + 1) * config.storyHeightFt
-        },
-        source: sources.residentialCode,
-        note: "Wall color represents conceptual accumulated tributary gravity support demand by story segment, not solved masonry stress or capacity."
-      });
+    const xLengthFt = wall.xMax - wall.xMin;
+    const yLengthFt = wall.yMax - wall.yMin;
+    const samplesAlongLength = Math.max(1, Math.ceil(Math.max(xLengthFt, yLengthFt) / 6));
+    const samplesPerStory = 5;
+    const totalElementArea = Math.max(1, (xLengthFt + yLengthFt) * buildingHeight);
+
+    for (let alongIndex = 0; alongIndex < samplesAlongLength; alongIndex += 1) {
+      const alongStart = alongIndex / samplesAlongLength;
+      const alongEnd = (alongIndex + 1) / samplesAlongLength;
+      const xMin = xLengthFt >= yLengthFt ? wall.xMin + xLengthFt * alongStart : wall.xMin;
+      const xMax = xLengthFt >= yLengthFt ? wall.xMin + xLengthFt * alongEnd : wall.xMax;
+      const yMin = yLengthFt > xLengthFt ? wall.yMin + yLengthFt * alongStart : wall.yMin;
+      const yMax = yLengthFt > xLengthFt ? wall.yMin + yLengthFt * alongEnd : wall.yMax;
+      const sampleLength = (xMax - xMin) + (yMax - yMin);
+
+      for (let story = 0; story < config.stories; story += 1) {
+        for (let verticalIndex = 0; verticalIndex < samplesPerStory; verticalIndex += 1) {
+          const zMin = (story + verticalIndex / samplesPerStory) * config.storyHeightFt;
+          const zMax = (story + (verticalIndex + 1) / samplesPerStory) * config.storyHeightFt;
+          const zMid = (zMin + zMax) / 2;
+          const heightFactor = cumulativeHeightFactor(zMid, buildingHeight);
+          const sampleArea = Math.max(0.5, sampleLength * (zMax - zMin));
+          const tributaryShare = sampleArea / totalElementArea;
+          const demandKips = round(wallDeadLoadKips * wall.share * heightFactor * tributaryShare, 4);
+          rawDemandSurfaces.push({
+            id: `${wall.id}-continuous-${alongIndex + 1}-${story + 1}-${verticalIndex + 1}`,
+            label: `${wall.label} continuous gravity sample ${alongIndex + 1}.${story + 1}.${verticalIndex + 1}`,
+            kind: "wall-line",
+            demandKips,
+            areaSqFt: round(sampleArea),
+            demandPsf: demandPsf(demandKips, sampleArea),
+            bounds: {
+              xMinFt: xMin,
+              xMaxFt: xMax,
+              yMinFt: yMin,
+              yMaxFt: yMax,
+              zMinFt: zMin,
+              zMaxFt: zMax
+            },
+            source: sources.residentialCode,
+            note: "Wall color represents a continuous sampled gravity-demand field along the load-bearing element; values remain conceptual tributary demand, not solved stress or capacity."
+          });
+        }
+      }
     }
   }
   const minDemandPsf = Math.min(...rawDemandSurfaces.map((surface) => surface.demandPsf));

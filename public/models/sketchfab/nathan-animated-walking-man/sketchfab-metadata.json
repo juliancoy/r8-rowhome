@@ -1,0 +1,31 @@
+{
+  "uid": "143a2b1ea5eb4385ae90a73657aca3bc",
+  "name": "Nathan Animated 003 - Walking 3D Man",
+  "author": "Renderpeople",
+  "authorUrl": "https://sketchfab.com/renderpeople",
+  "viewerUrl": "https://sketchfab.com/3d-models/nathan-animated-003-walking-3d-man-143a2b1ea5eb4385ae90a73657aca3bc",
+  "license": {
+    "uri": "https://api.sketchfab.com/v3/licenses/322a749bcfa841b29dff1e8a1bb74b0b",
+    "label": "CC Attribution",
+    "fullName": "Creative Commons Attribution",
+    "requirements": "Author must be credited. Commercial use is allowed.",
+    "url": "http://creativecommons.org/licenses/by/4.0/",
+    "slug": "by"
+  },
+  "downloadedFrom": "Sketchfab API glTF archive",
+  "optimizedTextures": [
+    {
+      "path": "textures/rp_nathan_animated_003_mat_baseColor.jpeg",
+      "originalDimensions": [
+        8192,
+        8192
+      ],
+      "optimizedDimensions": [
+        2048,
+        2048
+      ],
+      "originalBytes": 18827746,
+      "optimizedBytes": 559812
+    }
+  ]
+}

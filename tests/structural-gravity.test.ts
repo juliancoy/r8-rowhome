@@ -1,9 +1,8 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { defaultRowhomeConfig } from "../src/core/config";
 import { exportModelMetadataJson } from "../src/export/json";
 import { generateRowhome } from "../src/generators/rowhome";
+import { buildStructuralGravityReport } from "../src/reports/structuralGravity";
 import { buildStructuralModel } from "../src/structure/gravity";
 import { structuralDemandColor } from "../src/viewer/structuralOverlay";
 
@@ -21,19 +20,25 @@ describe("conceptual structural gravity model", () => {
     expect(structural.loadCases.map((loadCase) => loadCase.id)).toEqual(["dead", "floor-live", "roof-live"]);
     expect(structural.areaLoads.length).toBe(defaultRowhomeConfig.stories * 2 + 2);
     expect(structural.areaLoads.every((load) => load.totalKips > 0 && load.source.length > 0)).toBe(true);
-    expect(structural.demandSurfaces.length).toBe(defaultRowhomeConfig.stories + 1 + defaultRowhomeConfig.stories * 4);
+    expect(structural.demandSurfaces.length).toBeGreaterThan(defaultRowhomeConfig.stories + 1 + defaultRowhomeConfig.stories * 4);
     expect(structural.demandSurfaces.every((surface) => surface.intensity >= 0 && surface.intensity <= 1)).toBe(true);
-    expect(structural.demandSurfaces.some((surface) => surface.kind === "roof-area" && surface.intensity === 0)).toBe(true);
+    expect(structural.demandSurfaces.some((surface) => surface.kind === "roof-area" && surface.demandKips > 0)).toBe(true);
     const floorDemandSurfaces = structural.demandSurfaces.filter((surface) => surface.kind === "floor-area");
     expect(floorDemandSurfaces.length).toBe(defaultRowhomeConfig.stories);
     expect(Math.max(...floorDemandSurfaces.map((surface) => surface.intensity))).toBeGreaterThan(0);
-    const leftPartyWallByStory = structural.demandSurfaces
-      .filter((surface) => surface.id.startsWith("left-party-wall-demand-story-"))
+    const leftPartyWallByElevation = structural.demandSurfaces
+      .filter((surface) => surface.id.startsWith("left-party-wall-demand-continuous-"))
       .sort((a, b) => a.bounds.zMinFt - b.bounds.zMinFt);
-    expect(leftPartyWallByStory).toHaveLength(defaultRowhomeConfig.stories);
-    expect(leftPartyWallByStory[0].demandKips).toBeGreaterThan(leftPartyWallByStory[leftPartyWallByStory.length - 1].demandKips);
-    expect(leftPartyWallByStory[0].intensity).toBeGreaterThan(leftPartyWallByStory[leftPartyWallByStory.length - 1].intensity);
-    expect(leftPartyWallByStory[0].intensity).toBeGreaterThan(Math.max(...floorDemandSurfaces.map((surface) => surface.intensity)));
+    expect(leftPartyWallByElevation.length).toBeGreaterThan(defaultRowhomeConfig.stories * 4);
+    expect(leftPartyWallByElevation.every((surface, index, surfaces) =>
+      index === 0 || surface.bounds.zMinFt <= surfaces[index - 1].bounds.zMinFt + defaultRowhomeConfig.storyHeightFt / 5 + 0.001
+    )).toBe(true);
+    const bottomLeftPartyWall = leftPartyWallByElevation.filter((surface) => surface.bounds.zMaxFt <= defaultRowhomeConfig.storyHeightFt);
+    const topLeftPartyWall = leftPartyWallByElevation.filter((surface) => surface.bounds.zMinFt >= (defaultRowhomeConfig.stories - 1) * defaultRowhomeConfig.storyHeightFt);
+    expect(bottomLeftPartyWall.length).toBeGreaterThan(1);
+    expect(topLeftPartyWall.length).toBeGreaterThan(1);
+    expect(Math.max(...bottomLeftPartyWall.map((surface) => surface.demandPsf))).toBeGreaterThan(Math.max(...topLeftPartyWall.map((surface) => surface.demandPsf)));
+    expect(Math.max(...bottomLeftPartyWall.map((surface) => surface.intensity))).toBeGreaterThan(Math.max(...topLeftPartyWall.map((surface) => surface.intensity)));
     expect(structural.loadCombinations.some((combination) => combination.id === "strength-floor-live" && combination.totalKips > structural.gravityReport.totalDeadLoadKips)).toBe(true);
     expect(structural.loadCombinations.some((combination) => combination.status === "blocked-requires-lateral-model")).toBe(true);
     expect(structural.designChecks.some((check) => check.id === "foundation-bearing" && check.status === "blocked-requires-design-input")).toBe(true);
@@ -63,6 +68,7 @@ describe("conceptual structural gravity model", () => {
     const model = generateRowhome(defaultRowhomeConfig);
     const exported = JSON.parse(exportModelMetadataJson(model)) as {
       structural?: { status?: string; gravityReport?: { totalGravityLoadKips?: number } };
+      permitReadiness?: { status?: string; buildability?: { blockerCount?: number } };
       validation?: Array<{ code: string }>;
     };
 
@@ -70,6 +76,8 @@ describe("conceptual structural gravity model", () => {
     expect(model.validation.some((message) => message.code === "conceptual_structural_model_only")).toBe(true);
     expect(exported.structural?.status).toBe("conceptual-load-model");
     expect(exported.structural?.gravityReport?.totalGravityLoadKips).toBe(model.structural?.gravityReport.totalGravityLoadKips);
+    expect(exported.permitReadiness?.status).toBe("not-buildable");
+    expect(exported.permitReadiness?.buildability?.blockerCount).toBeGreaterThan(0);
   });
 
   it("adds schematic steel support members when the steel support option is selected", () => {
@@ -97,44 +105,10 @@ describe("conceptual structural gravity model", () => {
     expect(model.structural?.members.some((member) => member.kind === "steel-column")).toBe(false);
   });
 
-  it("writes a headless structural gravity report artifact", () => {
-    const model = generateRowhome(defaultRowhomeConfig);
-    const structural = model.structural;
-    if (!structural) {
-      throw new Error("Missing structural model");
-    }
-    const report = {
-      generatedAt: new Date().toISOString(),
-      purpose: "Headless CI structural gravity preflight report. The website renderer does not run stiffness solves or engineering design.",
-      status: structural.status,
-      counts: {
-        nodes: structural.nodes.length,
-        members: structural.members.length,
-        supports: structural.supports.length,
-        areaLoads: structural.areaLoads.length
-      },
-      gravityReport: structural.gravityReport,
-      checks: {
-        hasSupports: structural.supports.length > 0,
-        hasDeadAndLiveLoads: structural.loadCases.some((loadCase) => loadCase.category === "dead") && structural.loadCases.some((loadCase) => loadCase.category === "live"),
-        allLoadsPositive: structural.areaLoads.every((load) => load.areaSqFt > 0 && load.loadPsf > 0 && load.totalKips > 0),
-        exposesConceptualWarnings: structural.warnings.length > 0,
-        hasDemandHeatMapSurfaces: structural.demandSurfaces.length > 0,
-        hasLoadCombinations: structural.loadCombinations.length > 0,
-        hasRequiredDesignChecks: structural.designChecks.length > 0
-      },
-      assumptions: structural.assumptions,
-      warnings: structural.warnings,
-      loadCombinations: structural.loadCombinations,
-      designChecks: structural.designChecks,
-      solverStatus: structural.solverStatus,
-      demandSurfaces: structural.demandSurfaces,
-      areaLoads: structural.areaLoads
-    };
+  it("builds a headless structural gravity report without writing artifacts", () => {
+    const report = buildStructuralGravityReport("test-generated-at");
 
-    mkdirSync(resolve("artifacts/structural-gravity"), { recursive: true });
-    writeFileSync(resolve("artifacts/structural-gravity/structural-gravity-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
-
+    expect(report.generatedAt).toBe("test-generated-at");
     expect(report.checks.hasSupports).toBe(true);
     expect(report.checks.hasDeadAndLiveLoads).toBe(true);
     expect(report.checks.allLoadsPositive).toBe(true);

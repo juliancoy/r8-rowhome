@@ -3,3 +3,7 @@ dist/
 .vite/
 .docker/
 *.local
+artifacts/
+artifacts/browser-smoke-dist/
+artifacts/renderer-benchmark-dist/
+.env

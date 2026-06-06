@@ -1,5 +1,6 @@
 import type { RowhomeConfig, RowhomeModel, ValidationMessage } from "../core/types";
 import { sources } from "../core/sources";
+import { buildBuildabilityReadiness } from "../buildability/readiness";
 
 export function validateRowhome(config: RowhomeConfig, model: RowhomeModel): ValidationMessage[] {
   const messages: ValidationMessage[] = [
@@ -56,6 +57,16 @@ export function validateRowhome(config: RowhomeConfig, model: RowhomeModel): Val
       code: "missing_structural_supports",
       message: "Structural model has no defined support restraints.",
       source: sources.residentialCode
+    });
+  }
+
+  const buildability = buildBuildabilityReadiness(model);
+  if (buildability.status === "not-buildable") {
+    messages.push({
+      severity: "warning",
+      code: "not_buildable_from_model",
+      message: `Construction is blocked by ${buildability.blockerCount} buildability requirements; see legal_procedure.md and the buildability readiness register.`,
+      source: "legal_procedure.md"
     });
   }
 

@@ -1,6 +1,7 @@
 import type { ModelComponent, RowhomeConfig } from "../core/types";
 import { sources } from "../core/sources";
 import { box, metadata } from "./builder";
+import { attachRealAsset } from "./realAssets";
 
 type LightingPoint = readonly [id: string, name: string, floor: number, x: number, y: number];
 
@@ -104,11 +105,11 @@ export function addStandardElectricalSystem(
     { x: panelX + 0.18, y: panelY + 0.25, z: buildingHeight / 2 }
   );
 
-  for (const [i, id] of ["main", "lighting-1", "lighting-2", "receptacle-1", "receptacle-2", "kitchen-small-appliance", "range-240v", "hvac", "water-heater"].entries()) {
+  for (const [i, id] of ["main", "lighting-1", "lighting-2", "receptacle-1", "receptacle-2", "kitchen-small-appliance", "range-240v", "hvac", "water-heater", "pv-battery"].entries()) {
     box(
       components,
-      metadata(`breaker-${id}`, `${id.replaceAll("-", " ")} circuit breaker`, "electrical", id === "range-240v" ? "2-pole molded-case circuit breaker" : "plug-on molded-case circuit breaker", sources.electricalCode, 85, true, [...standardNotes, "connected to electrical-panel bus bars and branch circuit conductors"]),
-      id === "range-240v" ? "#8e2e2e" : "#30373d",
+      metadata(`breaker-${id}`, `${id.replaceAll("-", " ")} circuit breaker`, "electrical", id === "range-240v" || id === "pv-battery" ? "2-pole molded-case circuit breaker" : "plug-on molded-case circuit breaker", sources.electricalCode, 85, true, [...standardNotes, "connected to electrical-panel bus bars and branch circuit conductors"]),
+      id === "range-240v" || id === "pv-battery" ? "#8e2e2e" : "#30373d",
       0.18,
       0.06,
       0.28,
@@ -200,7 +201,7 @@ export function addStandardElectricalSystem(
 
   box(
     components,
-    metadata("floor-lamp-base", "Living room floor lamp base", "electrical", "portable LED floor lamp", sources.electricalCode, 180, true, [...standardNotes, "connected by cord-and-plug to receptacle-120v-2"]),
+    attachRealAsset(metadata("floor-lamp-base", "Living room floor lamp base", "electrical", "portable LED floor lamp", sources.electricalCode, 180, true, [...standardNotes, "connected by cord-and-plug to receptacle-120v-2"]), "lampRoundFloor", "Round floor lamp"),
     "#4b3c2a",
     0.8,
     0.8,
@@ -290,6 +291,18 @@ export function addStandardElectricalSystem(
     0.12,
     { x: w - 5.0, y: d + 1.2, z: 3.6 }
   );
+  for (let floor = 0; floor < config.stories; floor += 1) {
+    const level = floor + 1;
+    box(
+      components,
+      metadata(`floor-${level}-heater-branch-circuit`, `Floor ${level} heater branch circuit`, "electrical", "12 AWG copper heat-pump indoor-unit branch circuit", sources.electricalCode, 360, true, [...standardNotes, `connected to breaker-hvac and floor-${level}-heat-pump-indoor-unit`]),
+      "#e09a35",
+      0.1,
+      Math.max(4.0, d - 20.0),
+      0.1,
+      { x: w - 1.05, y: d / 2, z: floor * config.storyHeightFt + 6.6 }
+    );
+  }
   box(
     components,
     metadata("water-heater-branch-circuit", "Heat pump water heater branch circuit", "electrical", "10 AWG copper water-heater equipment cable", sources.electricalCode, 480, true, [...standardNotes, "connected to breaker-water-heater and electric-water-heater"]),
