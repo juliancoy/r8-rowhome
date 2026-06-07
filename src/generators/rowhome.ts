@@ -1117,8 +1117,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
       0,
       false,
       [
-        "Preferred runtime replacement is the local assets/Tree1.3ds model when available.",
-        "Fallback runtime replacement remains the CC0 GLB tree asset if the local 3DS tree cannot be loaded.",
+        "Runtime replacement is the local CC0 GLB tree asset.",
         "This placeholder sets the physical scale and position for the imported tree model."
       ]
     );

@@ -1,30 +1,31 @@
-import { Box3, Group, LoadingManager, Object3D, Vector3 } from "three";
+import { Box3, Group, Object3D, Vector3 } from "three";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { TDSLoader } from "three/examples/jsm/loaders/TDSLoader.js";
 import type { ModelComponent } from "../core/types";
 import { componentMatchesViewMode, type ViewMode } from "./layers";
-import tree1TdsUrl from "../../assets/Tree1.3ds?url";
-import treeBarkTextureUrl from "../../assets/bark_loo.jpg?url";
-import treeLeafTextureUrl from "../../assets/blatt1.jpg?url";
-import treeLeafAlphaTextureUrl from "../../assets/blatt1_a.jpg?url";
 
 const loadedProductModels = new Map<string, Object3D>();
 const loadingProductModels = new Map<string, Promise<Object3D>>();
 const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath("/draco/");
+const appBaseUrl = import.meta.env.BASE_URL || "/";
+const normalizedAppBaseUrl = appBaseUrl.endsWith("/") ? appBaseUrl : `${appBaseUrl}/`;
+
+function runtimeAssetUrl(url: string): string {
+  if (/^(https?:|data:|blob:)/.test(url)) {
+    return url;
+  }
+  if (url.startsWith("/")) {
+    return `${normalizedAppBaseUrl}${url.slice(1)}`;
+  }
+  return url;
+}
+
+dracoLoader.setDecoderPath(runtimeAssetUrl("/draco/"));
 const gltfLoader = new GLTFLoader();
 gltfLoader.setDRACOLoader(dracoLoader);
-const tree3dsResourceMap = {
-  "bark_loo.jpg": treeBarkTextureUrl,
-  "blatt1.jpg": treeLeafTextureUrl,
-  "blatt1_a.jpg": treeLeafAlphaTextureUrl
-} as const;
 
 type ProductLoadSpec = {
   cacheKey: string;
-  loader: "gltf" | "tds";
-  resourceMap?: Record<string, string>;
   url: string;
 };
 
@@ -37,47 +38,23 @@ function cloneLoadedModel(model: Object3D): Object3D {
   return clone;
 }
 
-function loadTdsModel(spec: ProductLoadSpec): Promise<Object3D> {
-  return new Promise<Object3D>((resolve, reject) => {
-    const manager = new LoadingManager();
-    manager.setURLModifier((url) => {
-      const filename = url.split("/").pop() ?? url;
-      return spec.resourceMap?.[filename] ?? url;
-    });
-    const tdsLoader = new TDSLoader(manager);
-    tdsLoader.load(
-      spec.url,
-      (object) => resolve(object),
-      undefined,
-      reject
-    );
-  });
-}
-
 function loadProductModel(spec: ProductLoadSpec): Promise<Object3D> {
   const cached = loadedProductModels.get(spec.cacheKey);
   if (cached) {
     return Promise.resolve(cloneLoadedModel(cached));
   }
 
-  const loading = loadingProductModels.get(spec.cacheKey) ?? (
-    spec.loader === "tds"
-      ? loadTdsModel(spec).then((object) => {
-          loadedProductModels.set(spec.cacheKey, object);
-          return cloneLoadedModel(object);
-        })
-      : new Promise<Object3D>((resolve, reject) => {
-          gltfLoader.load(
-            spec.url,
-            (gltf) => {
-              loadedProductModels.set(spec.cacheKey, gltf.scene);
-              resolve(cloneLoadedModel(gltf.scene));
-            },
-            undefined,
-            reject
-          );
-        })
-  );
+  const loading = loadingProductModels.get(spec.cacheKey) ?? new Promise<Object3D>((resolve, reject) => {
+    gltfLoader.load(
+      spec.url,
+      (gltf) => {
+        loadedProductModels.set(spec.cacheKey, gltf.scene);
+        resolve(cloneLoadedModel(gltf.scene));
+      },
+      undefined,
+      reject
+    );
+  });
   loadingProductModels.set(spec.cacheKey, loading);
   return loading.then(cloneLoadedModel);
 }
@@ -116,25 +93,10 @@ function loadSpecsForComponent(component: ModelComponent): ProductLoadSpec[] {
   if (!product) {
     return [];
   }
-  if (component.metadata.id.endsWith("street-tree-real-model-bounds")) {
-    return [
-      {
-        cacheKey: "street-tree-3ds-override",
-        loader: "tds",
-        resourceMap: tree3dsResourceMap,
-        url: tree1TdsUrl
-      },
-      {
-        cacheKey: product.url,
-        loader: "gltf",
-        url: product.url
-      }
-    ];
-  }
+  const url = runtimeAssetUrl(product.url);
   return [{
-    cacheKey: product.url,
-    loader: product.url.toLowerCase().endsWith(".3ds") ? "tds" : "gltf",
-    url: product.url
+    cacheKey: url,
+    url
   }];
 }
 
