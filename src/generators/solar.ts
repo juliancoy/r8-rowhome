@@ -14,11 +14,11 @@ export function addRoofSolarArray(
   const rowSpacing = 6.05;
   const startX = 6.75;
   const startY = 9.0;
-  const panelZ = buildingHeight + 0.52;
-  const rackZ = buildingHeight + 0.38;
+  const panelZ = buildingHeight + 1.36;
+  const rackZ = buildingHeight + 1.16;
   const notes = [
     "Conceptual flat-roof photovoltaic array; final capacity, setbacks, fire access paths, ballast, wind uplift, and roof attachment require licensed design.",
-    "Array is placed on the right-side roof plate to keep clear of the stairwell opening, parapet zone, plumbing vent, and roof drain.",
+    "Array is placed on raised ballasted racks above the tapered roof/drainage finish and clear of the stairwell opening, parapet zone, plumbing vent, and roof drain.",
     "PV output is routed to a lithium-ion battery and inverter as a conceptual energy-storage system; listing, spacing, ventilation, fire separation, rapid shutdown, labeling, and interconnection require electrical design."
   ];
 
@@ -122,7 +122,7 @@ export function addRoofSolarArray(
     1.2,
     0.6,
     0.9,
-    { x: startX + 2 * columnSpacing + 2.0, y: startY + rowSpacing, z: buildingHeight + 0.85 }
+    { x: startX + 2 * columnSpacing + 2.0, y: startY + rowSpacing, z: buildingHeight + 1.55 }
   );
 
   box(
@@ -144,7 +144,7 @@ export function addRoofSolarArray(
     0.18,
     rowSpacing * 2 + 1.2,
     0.18,
-    { x: startX + 2 * columnSpacing + 1.0, y: startY + rowSpacing, z: buildingHeight + 0.7 }
+    { x: startX + 2 * columnSpacing + 1.0, y: startY + rowSpacing, z: buildingHeight + 1.24 }
   );
 
   box(

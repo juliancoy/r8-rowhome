@@ -76,9 +76,19 @@ describe("professional-practice rowhome acceptance checks", () => {
     expect(readiness.status).toBe("not-buildable");
     expect(readiness.modelSupportedCount).toBeGreaterThanOrEqual(3);
     expect(readiness.blockerCount).toBeGreaterThanOrEqual(6);
+    expect(readiness.items.some((item) =>
+      item.id === "architect-roof-envelope-coordination-modeled"
+        && item.status === "model-supported"
+        && item.evidence.includes("architect-roof-access-bulkhead-weatherhood")
+    )).toBe(true);
     expect(blockers.some((item) => item.id === "permit-approval-required")).toBe(true);
+    expect(blockers.some((item) =>
+      item.id === "sealed-architectural-drawings-required"
+        && item.evidence.includes("architect-permit-document-index")
+        && item.missingInputs.includes("licensed architect review")
+    )).toBe(true);
     expect(blockers.some((item) => item.id === "structural-design-required" && item.missingInputs.includes("lateral loads"))).toBe(true);
-    expect(blockers.some((item) => item.id === "hvac-design-required" && item.missingInputs.includes("Manual J"))).toBe(true);
+    expect(blockers.some((item) => item.id === "hvac-design-required" && item.missingInputs.includes("Manual J cooling loads"))).toBe(true);
     expect(blockers.some((item) => item.id === "electrical-design-required" && item.missingInputs.includes("battery energy-storage listing and shutdown"))).toBe(true);
     expect(blockers.every((item) => item.requirement.length > 0 && item.source.length > 0 && item.missingInputs.length > 0)).toBe(true);
   });
@@ -137,11 +147,12 @@ describe("professional-practice rowhome acceptance checks", () => {
       }));
     const hvacGraph = graphFromEdges(hvacEdges);
 
-    expect(ids.has("heat-pump-condenser")).toBe(true);
+    expect(ids.has("central-ac-condenser")).toBe(true);
+    expect(ids.has("central-cooling-coil")).toBe(true);
     expect(ids.has("air-handler")).toBe(true);
     for (let level = 1; level <= defaultRowhomeConfig.stories; level += 1) {
-      expect(ids.has(`floor-${level}-heat-pump-indoor-unit`), `floor ${level} heater`).toBe(true);
-      expect(ids.has(`floor-${level}-thermostat`), `floor ${level} thermostat`).toBe(true);
+      expect(ids.has(`floor-${level}-cooling-zone-terminal`), `floor ${level} cooling terminal`).toBe(true);
+      expect(ids.has(`floor-${level}-cooling-thermostat`), `floor ${level} thermostat`).toBe(true);
     }
     expect(ids.has("supply-plenum")).toBe(true);
     expect(ids.has("return-plenum")).toBe(true);
@@ -173,10 +184,13 @@ describe("professional-practice rowhome acceptance checks", () => {
       "breaker-water-heater",
       "breaker-range-240v",
       "air-handler-branch-circuit",
-      "heat-pump-branch-circuit",
-      "floor-1-heater-branch-circuit",
-      "floor-2-heater-branch-circuit",
-      "floor-3-heater-branch-circuit",
+      "central-ac-condenser-branch-circuit",
+      "floor-1-cooling-control-circuit",
+      "floor-2-cooling-control-circuit",
+      "floor-3-cooling-control-circuit",
+      "floor-1-heating-branch-circuit",
+      "floor-2-heating-branch-circuit",
+      "floor-3-heating-branch-circuit",
       "water-heater-branch-circuit",
       "range-240v-circuit",
       "kitchen-240v-outlet",

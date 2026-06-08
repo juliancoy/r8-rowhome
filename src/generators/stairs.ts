@@ -109,6 +109,38 @@ export function addAlternatingRunStairFlight(
 
   const topZ = baseZ + steps * riserHeight;
   const topY = alternatingStairTopY(floor);
+  for (const [side, stringerX] of [["left", x - stairWidth / 2 + 0.12], ["right", x + stairWidth / 2 - 0.12]] as const) {
+    box(
+      components,
+      metadata(`stair-stringer-${side}-${floor + 1}`, `Stair ${side} structural stringer flight ${floor + 1}`, "structure", "engineered wood stair stringer", source, 620, true, [
+        ...stairNotes,
+        "Schematic stair stringer; final stair framing, hangers, bearing, fastening, and lateral restraint require structural review."
+      ]),
+      "#6f4728",
+      0.18,
+      steps * treadDepth + 0.8,
+      0.42,
+      { x: stringerX, y: runCenterY, z: baseZ + storyHeightLikeStairRunHeight(steps, riserHeight) / 2 }
+    );
+  }
+  for (const step of [4, 8, 12, 16]) {
+    const y = yStart + direction * ((step - 0.5) * treadDepth);
+    const postHeight = Math.max(0.5, step * riserHeight);
+    for (const postX of [x - stairWidth / 2 + 0.28, x + stairWidth / 2 - 0.28]) {
+      box(
+        components,
+        metadata(`stair-post-${floor + 1}-${step}-${postX < x ? "left" : "right"}`, `Stair support post flight ${floor + 1} step ${step} ${postX < x ? "left" : "right"}`, "structure", "wood stair support post", source, 210, true, [
+          ...stairNotes,
+          "Schematic post under stair framing; final load path, bearing, blocking, and connection design required."
+        ]),
+        "#5f3d24",
+        0.22,
+        0.22,
+        postHeight,
+        { x: postX, y, z: baseZ + postHeight / 2 }
+      );
+    }
+  }
   box(
     components,
     metadata(`stair-landing-${floor + 1}`, `Alternating stair landing ${floor + 1}`, "circulation", "wood stair landing", source, 1200, true, stairNotes),
@@ -117,6 +149,35 @@ export function addAlternatingRunStairFlight(
     alternatingStairPlan.landingDepth,
     0.32,
     { x, y: topY, z: topZ + 0.16 }
+  );
+  for (const postX of [x - stairWidth / 2 + 0.25, x + stairWidth / 2 - 0.25]) {
+    for (const postY of [topY - alternatingStairPlan.landingDepth / 2 + 0.25, topY + alternatingStairPlan.landingDepth / 2 - 0.25]) {
+      const landingPostHeight = Math.max(0.5, topZ - baseZ);
+      box(
+        components,
+        metadata(`stair-landing-post-${floor + 1}-${postX < x ? "left" : "right"}-${postY < topY ? "front" : "rear"}`, `Stair landing support post ${floor + 1}`, "structure", "wood landing support post", source, 260, true, [
+          ...stairNotes,
+          "Schematic landing post; final bearing and connection design required."
+        ]),
+        "#5f3d24",
+        0.24,
+        0.24,
+        landingPostHeight,
+        { x: postX, y: postY, z: baseZ + landingPostHeight / 2 }
+      );
+    }
+  }
+  box(
+    components,
+    metadata(`stair-landing-ledger-${floor + 1}`, `Stair landing wall ledger ${floor + 1}`, "structure", "wood landing ledger board", source, 430, true, [
+      ...stairNotes,
+      "Schematic landing ledger/beam showing bearing at the floor opening; final fastener and support design required."
+    ]),
+    "#6f4728",
+    stairWidth + alternatingStairPlan.landingExtraWidth,
+    0.28,
+    0.36,
+    { x, y: topY + direction * alternatingStairPlan.landingDepth / 2, z: topZ - 0.18 }
   );
 
   for (const [side, railX] of [["left", x - stairWidth / 2 - 0.12], ["right", x + stairWidth / 2 + 0.12]] as const) {
@@ -141,6 +202,10 @@ export function addAlternatingRunStairFlight(
       { x: railX, y: railY, z: railZ + 1.55 }
     );
   }
+}
+
+function storyHeightLikeStairRunHeight(steps: number, riserHeight: number): number {
+  return steps * riserHeight;
 }
 
 export function addAlternatingRunStairEgressBridge(

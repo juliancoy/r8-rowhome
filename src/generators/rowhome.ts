@@ -438,6 +438,902 @@ function addFloorPlateWithStairOpening(
   }
 }
 
+function stairOpeningBounds(config: RowhomeConfig): { xMin: number; xMax: number; yMin: number; yMax: number } {
+  if (config.stairImplementation === "spiral") {
+    return {
+      xMin: frontSpiralStairPlan.centerX - frontSpiralStairPlan.floorOpeningHalfFt,
+      xMax: frontSpiralStairPlan.centerX + frontSpiralStairPlan.floorOpeningHalfFt,
+      yMin: frontSpiralStairPlan.centerY - frontSpiralStairPlan.floorOpeningHalfFt,
+      yMax: frontSpiralStairPlan.centerY + frontSpiralStairPlan.floorOpeningHalfFt
+    };
+  }
+  return { xMin: 0.85, xMax: 5.15, yMin: 6.2, yMax: 35.2 };
+}
+
+function addStairShaftAndRoofOpeningDetails(
+  components: ModelComponent[],
+  config: RowhomeConfig,
+  buildingHeight: number
+): void {
+  const opening = stairOpeningBounds(config);
+  const centerX = (opening.xMin + opening.xMax) / 2;
+  const centerY = (opening.yMin + opening.yMax) / 2;
+  const openingWidth = opening.xMax - opening.xMin;
+  const openingDepth = opening.yMax - opening.yMin;
+  const notes = [
+    "Schematic stair shaft detail showing rough-opening framing, rated enclosure surfaces, guards, waterproofed roof curb, and continuous load path.",
+    "Final stair, guard, shaft enclosure, roof penetration, connection, and fire-resistance design requires licensed architectural and structural review."
+  ];
+  const structuralLogicNotes = [
+    ...notes,
+    "Implements the structural-logic workflow as traceable model scope: code basis, load tracing, opening framing, diaphragm continuity, bearing pads, guard attachments, waterproofing coordination, fire separation, and inspection hold points.",
+    "Component dimensions are coordination placeholders; final member sizes, reactions, fasteners, bearing pressures, and signed/sealed documents remain outside this conceptual model."
+  ];
+
+  box(
+    components,
+    metadata(
+      "structural-code-basis-and-load-schedule",
+      "Structural code basis and design-load schedule",
+      "structure",
+      "non-buildable structural notes plaque",
+      sources.residentialCode,
+      0,
+      false,
+      [
+        ...structuralLogicNotes,
+        "Lists governing code basis and preliminary dead, live, roof live/snow, guard, stair, roof-garden, wind uplift, and seismic/lateral design inputs for licensed review."
+      ]
+    ),
+    "#d8d0bd",
+    5.8,
+    0.08,
+    3.2,
+    { x: config.buildingWidthFt + 2.8, y: 7.0, z: 5.4 }
+  );
+  box(
+    components,
+    metadata(
+      "structural-field-survey-hold-point",
+      "Structural field survey and concealed-condition hold point",
+      "structure",
+      "non-buildable field verification marker",
+      sources.residentialCode,
+      0,
+      false,
+      [
+        ...structuralLogicNotes,
+        "Requires verification of existing joist direction, party wall condition, foundation bearing, moisture damage, prior alterations, and rated assemblies before final detailing."
+      ]
+    ),
+    "#b8a066",
+    5.8,
+    0.08,
+    2.4,
+    { x: config.buildingWidthFt + 2.8, y: 11.0, z: 4.8 }
+  );
+
+  for (let floor = 1; floor <= config.stories; floor += 1) {
+    const levelZ = floor * config.storyHeightFt;
+    const idPrefix = floor === config.stories ? "roof" : `floor-${floor}`;
+    for (const [edge, x, y, width, depth] of [
+      ["front-header", centerX, opening.yMin - 0.13, openingWidth + 0.52, 0.26],
+      ["rear-header", centerX, opening.yMax + 0.13, openingWidth + 0.52, 0.26],
+      ["left-trimmer", opening.xMin - 0.13, centerY, 0.26, openingDepth + 0.52],
+      ["right-trimmer", opening.xMax + 0.13, centerY, 0.26, openingDepth + 0.52]
+    ] as const) {
+      box(
+        components,
+        metadata(
+          `${idPrefix}-stair-opening-${edge}`,
+          `${idPrefix.replace("-", " ")} stair opening ${edge.replace("-", " ")}`,
+          "structure",
+          "engineered wood stair-opening header and trimmer framing",
+          sources.residentialCode,
+          floor === 1 && edge === "front-header" ? 1800 : 0,
+          true,
+          [...structuralLogicNotes, "Headers and trimmers represent the rough-opening load path around the stair shaft."]
+        ),
+        "#6c482c",
+        width,
+        depth,
+        0.42,
+        { x, y, z: levelZ + 0.42 }
+      );
+    }
+    for (const [edge, x, y, width, depth] of [
+      ["front-collector", centerX, opening.yMin - 0.48, openingWidth + 1.2, 0.18],
+      ["rear-collector", centerX, opening.yMax + 0.48, openingWidth + 1.2, 0.18],
+      ["left-diaphragm-blocking", opening.xMin - 0.48, centerY, 0.18, openingDepth + 1.2],
+      ["right-diaphragm-blocking", opening.xMax + 0.48, centerY, 0.18, openingDepth + 1.2]
+    ] as const) {
+      box(
+        components,
+        metadata(
+          `${idPrefix}-stair-opening-${edge}`,
+          `${idPrefix.replace("-", " ")} stair opening ${edge.replace("-", " ")}`,
+          "structure",
+          "wood diaphragm collector and edge blocking around stair opening",
+          sources.residentialCode,
+          floor === 1 && edge === "front-collector" ? 1250 : 0,
+          true,
+          [
+            ...structuralLogicNotes,
+            "Collector and blocking pieces preserve diaphragm continuity around the rough opening; final nailing, straps, chord forces, and drag connections require structural design."
+          ]
+        ),
+        "#4f3320",
+        width,
+        depth,
+        0.3,
+        { x, y, z: levelZ + 0.7 }
+      );
+    }
+  }
+
+  for (const [corner, x, y] of [
+    ["front-left", opening.xMin + 0.22, opening.yMin + 0.22],
+    ["front-right", opening.xMax - 0.22, opening.yMin + 0.22],
+    ["rear-left", opening.xMin + 0.22, opening.yMax - 0.22],
+    ["rear-right", opening.xMax - 0.22, opening.yMax - 0.22]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        `stair-shaft-continuous-load-post-${corner}`,
+        `Stair shaft continuous load-path post ${corner}`,
+        "structure",
+        "built-up wood post transferring stair opening loads to foundation",
+        sources.residentialCode,
+        corner === "front-left" ? 2200 : 0,
+        true,
+        [...structuralLogicNotes, "Continuous posts show a schematic gravity load path from roof/floor opening headers down to foundation bearing."]
+      ),
+      "#5f3d24",
+      0.32,
+      0.32,
+      buildingHeight,
+      { x, y, z: buildingHeight / 2 }
+    );
+    box(
+      components,
+      metadata(
+        `stair-shaft-post-cap-plate-${corner}`,
+        `Stair shaft post cap plate ${corner}`,
+        "structure",
+        "galvanized post cap and header bearing connector",
+        sources.residentialCode,
+        corner === "front-left" ? 520 : 0,
+        true,
+        [
+          ...structuralLogicNotes,
+          "Cap plate marks the required connection from headers/trimmers into the continuous load-path post; final connector model and fastener schedule require engineering."
+        ]
+      ),
+      "#8e979a",
+      0.58,
+      0.58,
+      0.1,
+      { x, y, z: buildingHeight + 0.15 }
+    );
+    box(
+      components,
+      metadata(
+        `stair-shaft-post-base-plate-${corner}`,
+        `Stair shaft post base plate ${corner}`,
+        "structure",
+        "galvanized post base and anchor plate",
+        sources.residentialCode,
+        corner === "front-left" ? 520 : 0,
+        true,
+        [
+          ...structuralLogicNotes,
+          "Base plate marks the required anchored transfer from post to foundation or basement support; final anchor design requires support reactions and foundation capacity."
+        ]
+      ),
+      "#8e979a",
+      0.62,
+      0.62,
+      0.1,
+      { x, y, z: 0.08 }
+    );
+    box(
+      components,
+      metadata(
+        `stair-shaft-bearing-pad-${corner}`,
+        `Stair shaft foundation bearing pad ${corner}`,
+        "structure",
+        "reinforced concrete bearing pad below stair shaft post",
+        sources.residentialCode,
+        corner === "front-left" ? 1400 : 0,
+        true,
+        [
+          ...structuralLogicNotes,
+          "Bearing pad makes the post load path explicit below grade; final footing size, reinforcement, soil bearing, and settlement checks require structural design."
+        ]
+      ),
+      "#8d8b83",
+      1.05,
+      1.05,
+      0.24,
+      { x, y, z: config.includeBasement ? -config.basementDepthFt + 0.12 : 0.12 }
+    );
+  }
+
+  for (const [side, x, y, width, depth] of [
+    ["left", opening.xMin - 0.04, centerY, 0.08, openingDepth],
+    ["right", opening.xMax + 0.04, centerY, 0.08, openingDepth],
+    ["front", centerX, opening.yMin - 0.04, openingWidth, 0.08],
+    ["rear", centerX, opening.yMax + 0.04, openingWidth, 0.08]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        `stair-shaft-${side}-type-x-gypsum`,
+        `Stair shaft ${side} Type X gypsum fire separation`,
+        "structure",
+        "5/8 in Type X gypsum stair-shaft fire separation layer",
+        sources.residentialCode,
+        side === "left" ? 1900 : 0,
+        true,
+        [...structuralLogicNotes, "Rated shaft surfaces are schematic and must be coordinated with doors, penetrations, continuity, and tested assemblies."]
+      ),
+      "#efe9dd",
+      width,
+      depth,
+      buildingHeight,
+      { x, y, z: buildingHeight / 2 }
+    );
+  }
+
+  for (const [edge, x, y, width, depth] of [
+    ["front", centerX, opening.yMin - 0.18, openingWidth + 0.72, 0.36],
+    ["rear", centerX, opening.yMax + 0.18, openingWidth + 0.72, 0.36],
+    ["left", opening.xMin - 0.18, centerY, 0.36, openingDepth + 0.72],
+    ["right", opening.xMax + 0.18, centerY, 0.36, openingDepth + 0.72]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        `roof-stair-opening-curb-${edge}`,
+        `Roof stair opening raised curb ${edge}`,
+        "roof",
+        "raised framed roof curb at stair opening",
+        sources.residentialCode,
+        edge === "front" ? 2600 : 0,
+        true,
+        [...structuralLogicNotes, "Raised curb keeps waterproofing and roof access detailing explicit around the stair opening."]
+      ),
+      "#7d6346",
+      width,
+      depth,
+      1.05,
+      { x, y, z: buildingHeight + 0.78 }
+    );
+    box(
+      components,
+      metadata(
+        `roof-stair-opening-flashing-${edge}`,
+        `Roof stair opening metal flashing ${edge}`,
+        "roof",
+        "sheet-metal counterflashing and waterproof membrane termination",
+        sources.residentialCode,
+        edge === "front" ? 1100 : 0,
+        true,
+        [...structuralLogicNotes, "Flashing and membrane returns are schematic; final detailing must coordinate slope, drainage, fasteners, and membrane manufacturer requirements."]
+      ),
+      "#9ba6aa",
+      width + 0.18,
+      depth + 0.18,
+      0.08,
+      { x, y, z: buildingHeight + 1.34 }
+    );
+    box(
+      components,
+      metadata(
+        `roof-stair-opening-uplift-strap-${edge}`,
+        `Roof stair opening curb uplift strap ${edge}`,
+        "structure",
+        "galvanized uplift strap from curb to roof framing",
+        sources.residentialCode,
+        edge === "front" ? 780 : 0,
+        true,
+        [
+          ...structuralLogicNotes,
+          "Uplift strap marks required curb anchorage into roof framing; final wind uplift demand, strap model, fasteners, and load path require engineering."
+        ]
+      ),
+      "#6f777b",
+      edge === "front" || edge === "rear" ? 0.14 : width + 0.08,
+      edge === "front" || edge === "rear" ? depth + 0.08 : 0.14,
+      1.35,
+      { x, y, z: buildingHeight + 0.72 }
+    );
+  }
+
+  for (const [edge, x, y, width, depth] of [
+    ["front", centerX, opening.yMin - 0.38, openingWidth + 1.0, 0.16],
+    ["rear", centerX, opening.yMax + 0.38, openingWidth + 1.0, 0.16],
+    ["left", opening.xMin - 0.38, centerY, 0.16, openingDepth + 1.0]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        `roof-stair-opening-guard-${edge}`,
+        `Roof stair opening guard ${edge}`,
+        "circulation",
+        "roof guardrail around stair opening",
+        sources.residentialCode,
+        edge === "front" ? 1850 : 0,
+        true,
+        [...structuralLogicNotes, "Guard layout leaves the right-side bridge/access route open and must be finalized for code-compliant height, openings, loads, and attachment."]
+      ),
+      "#31383d",
+      width,
+      depth,
+      3.5,
+      { x, y, z: buildingHeight + 2.15 }
+    );
+    for (const offset of [-0.42, 0.42]) {
+      const baseX = edge === "left" ? x : centerX + (width / 2 - 0.38) * offset;
+      const baseY = edge === "left" ? centerY + (openingDepth / 2 - 0.38) * offset : y;
+      box(
+        components,
+        metadata(
+          `roof-stair-opening-guard-base-${edge}-${offset < 0 ? "a" : "b"}`,
+          `Roof stair opening guard base attachment ${edge} ${offset < 0 ? "A" : "B"}`,
+          "structure",
+          "guard post base plate with waterproofed blocking",
+          sources.residentialCode,
+          edge === "front" && offset < 0 ? 420 : 0,
+          true,
+          [
+            ...structuralLogicNotes,
+            "Guard base marks the required post anchorage, backing/blocking, lateral load transfer, and waterproofed penetration coordination."
+          ]
+        ),
+        "#1f2529",
+        0.46,
+        0.46,
+        0.16,
+        { x: baseX, y: baseY, z: buildingHeight + 0.72 }
+      );
+    }
+  }
+
+  box(
+    components,
+    metadata(
+      "structural-special-inspection-hold-point",
+      "Structural special inspection and pre-cover hold point",
+      "structure",
+      "non-buildable inspection marker",
+      sources.residentialCode,
+      0,
+      false,
+      [
+        ...structuralLogicNotes,
+        "Requires inspection of exposed framing, post bases/caps, guard backing, firestopping, waterproofing terminations, and field deviations before concealment."
+      ]
+    ),
+    "#c8b46d",
+    5.8,
+    0.08,
+    2.4,
+    { x: config.buildingWidthFt + 2.8, y: 15.0, z: 4.8 }
+  );
+  box(
+    components,
+    metadata(
+      "structural-signed-sealed-drawing-placeholder",
+      "Signed and sealed structural drawing placeholder",
+      "structure",
+      "non-buildable structural drawing placeholder",
+      sources.residentialCode,
+      0,
+      false,
+      [
+        ...structuralLogicNotes,
+        "Represents the required final plans, sections, member schedules, connection details, calculations, permit responses, and sealed construction documents."
+      ]
+    ),
+    "#e3dfd2",
+    5.8,
+    0.08,
+    3.0,
+    { x: config.buildingWidthFt + 2.8, y: 19.2, z: 5.2 }
+  );
+}
+
+function addArchitecturalLogicDetails(
+  components: ModelComponent[],
+  config: RowhomeConfig,
+  buildingHeight: number
+): void {
+  const opening = stairOpeningBounds(config);
+  const centerX = (opening.xMin + opening.xMax) / 2;
+  const centerY = (opening.yMin + opening.yMax) / 2;
+  const openingWidth = opening.xMax - opening.xMin;
+  const openingDepth = opening.yMax - opening.yMin;
+  const w = config.buildingWidthFt;
+  const d = config.buildingDepthFt;
+  const architectNotes = [
+    "Implements the architect-logic workflow as traceable model scope: code basis, existing conditions, egress, stair geometry, roof access, waterproofing, fire separation, envelope continuity, MEP/life-safety coordination, permit documents, construction administration, and closeout.",
+    "Architectural components are schematic coordination placeholders; final dimensions, code analysis, schedules, specifications, AHJ responses, and signed/sealed documents require a licensed architect."
+  ];
+
+  for (const [id, name, source, y, height, note] of [
+    [
+      "architect-code-basis-and-zoning-matrix",
+      "Architect code basis, occupancy, zoning, accessibility, and preservation matrix",
+      sources.permitDocuments,
+      6.0,
+      3.1,
+      "Tracks occupancy, construction type, zoning, local amendments, fire code, energy code, accessibility, historic district triggers, and rowhome party-wall constraints."
+    ],
+    [
+      "architect-existing-conditions-survey-marker",
+      "Architect existing-conditions survey marker",
+      sources.permitDocuments,
+      9.8,
+      2.4,
+      "Requires field documentation of stair location, floor-to-floor heights, parapets, drainage, exterior walls, party walls, openings, finishes, rated assemblies, and selective demolition scope."
+    ],
+    [
+      "architect-permit-document-index",
+      "Architect permit drawing and specification index",
+      sources.permitDocuments,
+      28.2,
+      3.1,
+      "Represents code analysis, life-safety plans, demolition plans, floor plans, roof plans, reflected ceiling plans, wall sections, stair sections, details, schedules, specifications, and coordinated notes."
+    ],
+    [
+      "architect-ahj-review-response-log",
+      "Architect AHJ review and response log",
+      sources.permitDocuments,
+      32.0,
+      2.4,
+      "Tracks permit submission, plan-review comments, code interpretations, inspection coordination, and jurisdiction-required revisions."
+    ],
+    [
+      "architect-construction-administration-log",
+      "Architect construction administration log",
+      sources.permitDocuments,
+      35.4,
+      2.4,
+      "Tracks submittals, shop drawings, product data, waterproofing details, guardrail details, rated assembly documentation, RFIs, and milestone site observations."
+    ],
+    [
+      "architect-closeout-records",
+      "Architect closeout records and maintenance handoff",
+      sources.permitDocuments,
+      38.8,
+      2.4,
+      "Collects warranties, roof membrane documentation, firestopping records, inspection approvals, as-built updates, maintenance instructions, roof-access procedures, drainage maintenance, and guard/handrail upkeep."
+    ]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        id,
+        name,
+        "facade",
+        "non-buildable architectural coordination marker",
+        source,
+        0,
+        false,
+        [...architectNotes, note]
+      ),
+      "#d7d2c4",
+      6.0,
+      0.08,
+      height,
+      { x: -3.2, y, z: 5.0 }
+    );
+  }
+
+  box(
+    components,
+    metadata(
+      "architect-egress-life-safety-path",
+      "Architect life-safety egress path marker",
+      "circulation",
+      "non-buildable egress travel path and landing clearance marker",
+      sources.residentialCode,
+      0,
+      false,
+      [
+        ...architectNotes,
+        "Verifies front entry, stair landings, rear exits, roof access route, fire escape, handrails, guards, headroom, travel distance, door swing, thresholds, and required separation as architectural review scope."
+      ]
+    ),
+    "#6aa0a8",
+    0.16,
+    d + 8.0,
+    0.08,
+    { x: centerX + 0.75, y: d / 2 - 2.0, z: 0.62 }
+  );
+
+  for (let floor = 1; floor <= config.stories; floor += 1) {
+    const z = (floor - 1) * config.storyHeightFt + 6.7;
+    box(
+      components,
+      metadata(
+        `architect-stair-headroom-envelope-${floor}`,
+        `Architect stair headroom envelope floor ${floor}`,
+        "circulation",
+        "non-buildable stair headroom and clearance envelope",
+        sources.residentialCode,
+        0,
+        false,
+        [
+          ...architectNotes,
+          "Coordinates stair width, risers, treads, landings, guard locations, usable circulation, finish build-ups, and clear headroom in plan and section."
+        ]
+      ),
+      "#9ed6d2",
+      openingWidth + 0.8,
+      Math.min(8.4, openingDepth),
+      6.8,
+      { x: centerX, y: opening.yMin + Math.min(4.2, openingDepth / 2), z }
+    );
+  }
+
+  box(
+    components,
+    metadata(
+      "architect-roof-access-bulkhead-weatherhood",
+      "Architect roof access bulkhead weatherhood",
+      "roof",
+      "schematic weather-protected stair bulkhead enclosure",
+      sources.residentialCode,
+      4800,
+      true,
+      [
+        ...architectNotes,
+        "Defines roof access condition with weather protection, landing clearance, guard coordination, parapet relationship, hatch/door operation, and maintenance access."
+      ]
+    ),
+    "#b9c1c2",
+    openingWidth + 1.2,
+    3.1,
+    2.2,
+    { x: centerX, y: opening.yMin - 1.05, z: buildingHeight + 2.55 }
+  );
+  box(
+    components,
+    metadata(
+      "architect-roof-access-rated-door",
+      "Architect roof access rated door and threshold",
+      "facade",
+      "schematic insulated rated roof-access door with threshold",
+      sources.residentialCode,
+      1800,
+      true,
+      [
+        ...architectNotes,
+        "Coordinates door swing, threshold, landing clearance, hardware, weather seals, rated separation, and roof access operation."
+      ]
+    ),
+    "#26323a",
+    2.9,
+    0.16,
+    6.8,
+    { x: centerX, y: opening.yMin - 2.62, z: buildingHeight + 3.3 }
+  );
+
+  for (const [id, name, y, depth, z, material, color, note] of [
+    [
+      "architect-roof-membrane-turnup",
+      "Architect roof membrane turn-up at stair curb",
+      opening.yMin - 0.55,
+      0.18,
+      buildingHeight + 1.22,
+      "continuous roof membrane turn-up and counterflashing termination",
+      "#6f8388",
+      "Details curb height, membrane termination, counterflashing, vapor control, air barrier continuity, and manufacturer-required roof opening conditions."
+    ],
+    [
+      "architect-roof-protection-walk-pad",
+      "Architect roof protection walk pad",
+      centerY + 5.8,
+      9.2,
+      buildingHeight + 0.58,
+      "roof protection walk pad on membrane",
+      "#727a63",
+      "Coordinates maintenance walk path, protection board, roof garden access, service route, membrane protection, and guard/rail penetration avoidance."
+    ],
+    [
+      "architect-roof-overflow-scupper",
+      "Architect roof overflow scupper marker",
+      d - 1.0,
+      0.18,
+      buildingHeight + 0.92,
+      "overflow scupper and secondary drainage marker",
+      "#4f7f95",
+      "Coordinates roof slope, primary drainage, overflow drainage, scupper elevation, and water management with the roof opening and roof garden."
+    ]
+  ] as const) {
+    box(
+      components,
+      metadata(id, name, "roof", material, sources.residentialCode, id === "architect-roof-membrane-turnup" ? 1100 : 0, true, [...architectNotes, note]),
+      color,
+      id === "architect-roof-overflow-scupper" ? 2.0 : openingWidth + 1.8,
+      depth,
+      id === "architect-roof-overflow-scupper" ? 0.5 : 0.1,
+      { x: id === "architect-roof-overflow-scupper" ? w - 1.2 : centerX, y, z }
+    );
+  }
+
+  for (const [side, x, y, width, depth] of [
+    ["front", centerX, opening.yMin - 0.72, openingWidth + 1.3, 0.08],
+    ["rear", centerX, opening.yMax + 0.72, openingWidth + 1.3, 0.08],
+    ["left", opening.xMin - 0.72, centerY, 0.08, openingDepth + 1.3],
+    ["right", opening.xMax + 0.72, centerY, 0.08, openingDepth + 1.3]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        `architect-curb-air-vapor-control-${side}`,
+        `Architect curb air and vapor control ${side}`,
+        "roof",
+        "continuous air barrier, vapor control, and thermal transition at stair curb",
+        sources.energyCode,
+        side === "front" ? 1500 : 0,
+        true,
+        [
+          ...architectNotes,
+          "Maintains continuous insulation, air barrier, water-resistive barrier, vapor control, and thermal continuity at the roof opening and stair enclosure."
+        ]
+      ),
+      "#d8e0ca",
+      width,
+      depth,
+      1.15,
+      { x, y, z: buildingHeight + 0.9 }
+    );
+  }
+
+  for (const [id, x, y, z, note] of [
+    ["architect-rated-penetration-firestop-roof-vent", 13.9, 28.0, buildingHeight + 0.72, "Coordinates protected membrane penetration and firestopping at the plumbing vent through the roof assembly."],
+    ["architect-rated-penetration-firestop-exhaust", 6.6, d + 0.26, 9.2, "Coordinates protected duct penetration, rated separation, exterior termination, and fire/smoke continuity at the rear wall."],
+    ["architect-rated-penetration-firestop-electrical", 12.7, 4.0, buildingHeight + 0.72, "Coordinates protected electrical/solar raceway penetrations through rated or waterproofed assemblies."]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        id,
+        id.replace(/-/g, " "),
+        "systems",
+        "rated firestopping and protected penetration coordination marker",
+        sources.residentialCode,
+        0,
+        false,
+        [...architectNotes, note]
+      ),
+      "#d55d4a",
+      0.7,
+      0.7,
+      0.7,
+      { x, y, z }
+    );
+  }
+
+  for (const [id, x, y, z, width, depth, height, note] of [
+    ["architect-stair-finish-nosing-schedule", centerX, opening.yMin + 2.2, 1.05, openingWidth, 0.34, 0.18, "Coordinates finish build-up, nosings, slip resistance, riser/tread dimensions, and stair finish transitions."],
+    ["architect-roof-threshold-transition", centerX, opening.yMin - 2.05, buildingHeight + 0.64, 3.4, 0.42, 0.16, "Coordinates weather threshold, landing transition, roof membrane termination, door sweep, and accessibility/maintenance use."],
+    ["architect-rated-access-panel", opening.xMax + 0.55, centerY, config.storyHeightFt + 4.8, 0.12, 2.4, 2.4, "Coordinates access for concealed rated assemblies, MEP valves, inspection, and finish continuity around the stair shaft."]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        id,
+        id.replace(/-/g, " "),
+        "interior",
+        "architectural finish transition and access coordination marker",
+        sources.residentialCode,
+        0,
+        false,
+        [...architectNotes, note]
+      ),
+      "#c9a46d",
+      width,
+      depth,
+      height,
+      { x, y, z }
+    );
+  }
+
+  for (const [id, x, y, z, note] of [
+    ["architect-smoke-co-alarm-stair-hall", centerX + 1.6, opening.yMin + 1.2, config.storyHeightFt + 8.4, "Coordinates smoke/CO detection with stair hall circulation and life-safety plans."],
+    ["architect-emergency-lighting-stair-hall", centerX + 1.6, opening.yMin + 2.5, buildingHeight - 1.1, "Coordinates emergency lighting, switching, egress illumination, and electrical documentation where required."],
+    ["architect-mep-roof-penetration-coordination-zone", 13.2, 28.0, buildingHeight + 0.85, "Coordinates drains, vents, conduits, ducts, exhaust, sprinklers if present, alarms, and waterproofed/rated roof penetrations."]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        id,
+        id.replace(/-/g, " "),
+        "systems",
+        "architectural MEP and life-safety coordination marker",
+        sources.residentialCode,
+        0,
+        false,
+        [...architectNotes, note]
+      ),
+      "#f0d45a",
+      0.65,
+      0.65,
+      0.2,
+      { x, y, z }
+    );
+  }
+
+  box(
+    components,
+    metadata(
+      "architect-temporary-weather-protection-plan",
+      "Architect constructability and temporary weather protection plan",
+      "roof",
+      "non-buildable construction sequencing and weather protection marker",
+      sources.permitDocuments,
+      0,
+      false,
+      [
+        ...architectNotes,
+        "Coordinates demolition sequencing, temporary weather protection, roof membrane sequencing, stair installation access, protection of existing finishes, tolerances, field verification, and trade coordination."
+      ]
+    ),
+    "#b3a17a",
+    4.8,
+    0.12,
+    2.0,
+    { x: w + 2.4, y: d - 5.0, z: buildingHeight + 1.5 }
+  );
+}
+
+function addRoofRunoffManagementDetails(
+  components: ModelComponent[],
+  config: RowhomeConfig,
+  buildingHeight: number
+): void {
+  const opening = stairOpeningBounds(config);
+  const w = config.buildingWidthFt;
+  const d = config.buildingDepthFt;
+  const drain = { x: w - 1.2, y: d - 2.0 };
+  const notes = [
+    "Flat roof runoff is modeled with tapered insulation/slope zones, crickets around the stair bulkhead, a primary drain sump, overflow scuppers, and keep-clear service zones.",
+    "Final roof drainage requires code rainfall intensity, primary/secondary drain sizing, overflow elevation, structural ponding checks, membrane manufacturer details, and licensed design."
+  ];
+
+  for (const [id, name, x, y, width, depth, z, note] of [
+    ["roof-drainage-high-point-front", "Roof drainage high-point tapered insulation zone", w / 2, 8.0, w - 1.2, 13.5, buildingHeight + 0.72, "High-side tapered insulation starts runoff toward the rear-right primary drain."],
+    ["roof-drainage-mid-slope-field", "Roof drainage mid-slope tapered insulation field", w / 2 + 1.2, 25.0, w - 3.0, 18.0, buildingHeight + 0.61, "Intermediate slope field carries water around the stair opening and roof garden service path."],
+    ["roof-drainage-low-sump-field", "Roof drainage low-point sump field", drain.x - 1.8, drain.y - 1.4, 4.8, 5.0, buildingHeight + 0.50, "Lowest tapered field forms the primary sump around the roof drain inlet."]
+  ] as const) {
+    box(
+      components,
+      metadata(id, name, "roof", "tapered polyiso roof insulation creating positive drainage slope", sources.residentialCode, id === "roof-drainage-high-point-front" ? 2400 : 0, true, [...notes, note]),
+      "#7f8f78",
+      width,
+      depth,
+      0.08,
+      { x, y, z }
+    );
+    components[components.length - 1].object.userData.roofDrainage = {
+      kind: "tapered-slope-zone",
+      target: "roof-drain",
+      designSlopeInPerFt: 0.25
+    };
+  }
+
+  for (const [side, x, y, width, depth, note] of [
+    ["front", (opening.xMin + opening.xMax) / 2, opening.yMin - 1.15, opening.xMax - opening.xMin + 1.8, 0.42, "Front cricket splits runoff around the stair bulkhead curb instead of trapping it against the up-slope side."],
+    ["rear", (opening.xMin + opening.xMax) / 2, opening.yMax + 1.15, opening.xMax - opening.xMin + 1.8, 0.42, "Rear cricket turns water back toward the main low-point drain field."],
+    ["right", opening.xMax + 0.92, (opening.yMin + opening.yMax) / 2, 0.42, opening.yMax - opening.yMin + 1.8, "Right-side cricket protects the open roof access route and directs runoff away from the stair curb."]
+  ] as const) {
+    box(
+      components,
+      metadata(
+        `roof-drainage-cricket-${side}`,
+        `Roof drainage cricket ${side} of stair bulkhead`,
+        "roof",
+        "tapered roof cricket diverting water around stair curb",
+        sources.residentialCode,
+        side === "front" ? 1600 : 0,
+        true,
+        [...notes, note]
+      ),
+      "#91a184",
+      width,
+      depth,
+      0.18,
+      { x, y, z: buildingHeight + 0.86 }
+    );
+    components[components.length - 1].object.userData.roofDrainage = {
+      kind: "cricket",
+      target: "roof-drain",
+      avoids: "stair-bulkhead-curb"
+    };
+  }
+
+  box(
+    components,
+    metadata(
+      "roof-drain-sump-pan",
+      "Primary roof drain sump pan",
+      "roof",
+      "recessed roof drain sump pan integrated with membrane",
+      sources.plumbingCode,
+      900,
+      true,
+      [...notes, "Sump pan is the low point for the tapered roof field and must be flashed into the primary roof drain assembly."]
+    ),
+    "#4e6671",
+    2.4,
+    2.4,
+    0.12,
+    { x: drain.x, y: drain.y, z: buildingHeight + 0.48 }
+  );
+  components[components.length - 1].object.userData.roofDrainage = { kind: "primary-sump", drainsTo: "roof-drain-leader" };
+
+  box(
+    components,
+    metadata(
+      "roof-drain-strainer",
+      "Primary roof drain dome strainer",
+      "systems",
+      "cast aluminum dome strainer at primary roof drain",
+      sources.plumbingCode,
+      420,
+      true,
+      [...notes, "Dome strainer keeps leaves and roof-garden debris out of the storm leader while preserving inspection access."]
+    ),
+    "#9aa5a8",
+    1.1,
+    1.1,
+    0.55,
+    { x: drain.x, y: drain.y, z: buildingHeight + 0.86 }
+  );
+  components[components.length - 1].object.userData.roofDrainage = { kind: "primary-drain-inlet", drainsTo: "roof-drain-leader" };
+
+  for (const [id, y, z, note] of [
+    ["roof-overflow-scupper-rear-primary", d + 0.28, buildingHeight + 0.78, "Rear overflow scupper sits above the primary drain sump and provides a visible emergency discharge path if the roof drain blocks."],
+    ["roof-overflow-scupper-side-secondary", d - 6.0, buildingHeight + 0.86, "Side overflow scupper gives a second high-water route away from the stair curb and roof garden."]
+  ] as const) {
+    box(
+      components,
+      metadata(id, id.replace(/-/g, " "), "roof", "secondary overflow scupper through parapet", sources.plumbingCode, id.endsWith("primary") ? 650 : 0, true, [...notes, note]),
+      "#426f83",
+      1.6,
+      0.22,
+      0.5,
+      { x: w - 1.2, y, z }
+    );
+    components[components.length - 1].object.userData.roofDrainage = { kind: "overflow-scupper", trigger: "blocked-primary-drain" };
+  }
+
+  box(
+    components,
+    metadata(
+      "roof-drain-keep-clear-zone",
+      "Roof drain keep-clear maintenance zone",
+      "roof",
+      "non-printable roof drain maintenance clearance marker",
+      sources.plumbingCode,
+      0,
+      false,
+      [...notes, "No planter, PV rack, paver pedestal, guard base, or service equipment should block access to the drain sump and overflow route."]
+    ),
+    "#6fb3c8",
+    5.0,
+    5.0,
+    0.05,
+    { x: drain.x, y: drain.y, z: buildingHeight + 0.46 }
+  );
+  components[components.length - 1].object.userData.roofDrainage = { kind: "maintenance-clearance", protects: "roof-drain" };
+}
+
 function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   const components: ModelComponent[] = [];
   const buildingHeight = config.stories * config.storyHeightFt;
@@ -635,6 +1531,9 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   for (let floor = 0; floor <= config.stories; floor += 1) {
     addFloorPlateWithStairOpening(components, config, floor);
   }
+  addStairShaftAndRoofOpeningDetails(components, config, buildingHeight);
+  addArchitecturalLogicDetails(components, config, buildingHeight);
+  addRoofRunoffManagementDetails(components, config, buildingHeight);
   addFireAndThermalAssemblies(components, config, buildingHeight);
   if (config.structuralSupportScheme === "steel-post-beam") {
     addSteelSupportSystem(components, config, buildingHeight);
@@ -708,6 +1607,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
     { x: w / 2 - 0.4, y: facadeYAt(w / 2 - 0.4, 0.66), z: 3.8 },
     facadeAngleAt(w / 2 - 0.4)
   );
+  components[components.length - 1].object.visible = false;
   box(
     components,
     metadata("transom-window", "Entry transom window", "facade", "transom glazing", sources.baltimoreRowhouseAnatomy, 950),

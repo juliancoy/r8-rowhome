@@ -59,9 +59,9 @@ export function buildElectricalLoadCalculation(
       source: "sources/code-building-codes-part-iii-national-electrical-code-full.html"
     },
     {
-      id: "heat-pump-hvac",
-      description: "Modeled all-electric heat pump and air-handler preliminary allowance.",
-      voltAmps: hasComponent(model, "heat-pump-condenser") && hasComponent(model, "air-handler") ? 6500 : 0,
+      id: "central-ac-hvac",
+      description: "Modeled all-electric central AC condenser and air-handler preliminary allowance.",
+      voltAmps: hasComponent(model, "central-ac-condenser") && hasComponent(model, "air-handler") ? 6500 : 0,
       source: "sources/code-building-codes-part-iii-national-electrical-code-full.html"
     },
     {

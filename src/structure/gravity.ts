@@ -19,6 +19,7 @@ const floorDeadLoadPsf = 15;
 const floorLiveLoadPsf = 40;
 const roofDeadLoadPsf = 18;
 const roofLiveLoadPsf = 20;
+const roofGardenSaturatedDeadLoadPsf = 35;
 const masonryWallDensityPcf = 120;
 const facadeSurfaceDeadLoadPsf = 45;
 const steelSupportAllowanceKips = 18;
@@ -53,6 +54,16 @@ function stairOpeningArea(config: RowhomeConfig): number {
     return 6.4 * 6.4;
   }
   return 4.3 * 29.0;
+}
+
+function stairOpeningBounds(config: RowhomeConfig): { xMin: number; xMax: number; yMin: number; yMax: number } {
+  if (config.stairImplementation === "spiral") {
+    const centerX = 4.1;
+    const centerY = 8.0;
+    const half = 3.2;
+    return { xMin: centerX - half, xMax: centerX + half, yMin: centerY - half, yMax: centerY + half };
+  }
+  return { xMin: 0.85, xMax: 5.15, yMin: 6.2, yMax: 35.2 };
 }
 
 function addNode(nodes: StructuralNode[], id: string, xFt: number, yFt: number, zFt: number): void {
@@ -149,6 +160,12 @@ function buildDesignChecks(config: RowhomeConfig, members: StructuralMember[]): 
     supports: members.filter((member) => member.kind === "foundation-line").map((member) => member.id),
     steel: steelMemberIds
   };
+  const stairOpeningMembers = members
+    .filter((member) => member.kind === "stair-opening-header" || member.kind === "stair-shaft-post" || member.kind === "bearing-pad")
+    .map((member) => member.id);
+  const collectorMembers = members
+    .filter((member) => member.kind === "diaphragm-collector")
+    .map((member) => member.id);
   const checks: StructuralDesignCheck[] = [
     {
       id: "global-stability",
@@ -199,6 +216,46 @@ function buildDesignChecks(config: RowhomeConfig, members: StructuralMember[]): 
       source: sources.residentialCode,
       requirement: "Model wind/seismic forces, diaphragms, collectors, shear walls/frames, anchorage, and overturning.",
       missingInputs: ["site wind speed", "exposure", "seismic parameters", "diaphragm stiffness", "anchorage details"]
+    },
+    {
+      id: "stair-opening-load-path",
+      label: "Stair opening load path",
+      category: "connection",
+      targetIds: stairOpeningMembers,
+      status: "blocked-requires-solver",
+      source: sources.residentialCode,
+      requirement: "Verify headers, trimmers, post caps, post bases, bearing pads, and transferred reactions around the stair opening.",
+      missingInputs: ["header reactions", "post axial forces", "hanger/connector schedule", "bearing stresses", "fastener edge distances"]
+    },
+    {
+      id: "diaphragm-collector-continuity",
+      label: "Diaphragm collector continuity",
+      category: "lateral",
+      targetIds: collectorMembers,
+      status: "blocked-requires-design-input",
+      source: sources.residentialCode,
+      requirement: "Verify floor and roof diaphragm continuity around the stair opening with collectors, blocking, straps, and nailing schedules.",
+      missingInputs: ["diaphragm shear demand", "chord/collector forces", "sheathing nailing", "strap schedule", "drag connection details"]
+    },
+    {
+      id: "guard-attachment-loads",
+      label: "Guard and handrail attachment loads",
+      category: "connection",
+      targetIds: ["roof-stair-opening-guard-front", "roof-stair-opening-guard-rear", "roof-stair-opening-guard-left"],
+      status: "blocked-requires-design-input",
+      source: sources.residentialCode,
+      requirement: "Design guard post bases, blocking, anchors, corrosion protection, and waterproofed penetrations for required lateral and infill loads.",
+      missingInputs: ["guard live load criteria", "post spacing", "base plate geometry", "blocking layout", "waterproofed penetration detail"]
+    },
+    {
+      id: "roof-curb-uplift-waterproofing",
+      label: "Roof curb uplift and waterproofing coordination",
+      category: "connection",
+      targetIds: ["roof-stair-opening-curb-front", "roof-stair-opening-flashing-front", "roof-stair-opening-uplift-strap-front"],
+      status: "blocked-requires-design-input",
+      source: sources.residentialCode,
+      requirement: "Coordinate curb anchorage, wind uplift restraint, membrane terminations, counterflashing, drainage, and manufacturer-required heights.",
+      missingInputs: ["wind uplift pressure", "curb attachment schedule", "roof membrane system", "counterflashing detail", "roof drainage design"]
     }
   ];
 
@@ -256,8 +313,10 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
   const totalBuildingWidthFt = config.buildingWidthFt * rowhomeCount;
   const buildingHeight = config.stories * config.storyHeightFt;
   const basementZ = config.includeBasement ? -config.basementDepthFt : 0;
+  const opening = stairOpeningBounds(config);
   const floorPlateAreaSqFt = round(Math.max(0, totalBuildingWidthFt * config.buildingDepthFt - stairOpeningArea(config) * rowhomeCount));
   const roofAreaSqFt = round(totalBuildingWidthFt * config.buildingDepthFt);
+  const roofGardenAreaSqFt = round(Math.min(210, roofAreaSqFt * 0.25));
   const floorCount = config.stories;
   const totalFloorAreaSqFt = round(floorPlateAreaSqFt * floorCount);
   const partyWallVolumeCf = (rowhomeCount + 1) * 0.45 * config.buildingDepthFt * buildingHeight;
@@ -280,6 +339,17 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
   for (let story = 0; story <= config.stories; story += 1) {
     addNode(nodes, `floor-${story}-centerline-left`, 0.45, config.buildingDepthFt / 2, story * config.storyHeightFt + 0.16);
     addNode(nodes, `floor-${story}-centerline-right`, totalBuildingWidthFt - 0.45, config.buildingDepthFt / 2, story * config.storyHeightFt + 0.16);
+  }
+  for (const [corner, x, y] of [
+    ["front-left", opening.xMin + 0.22, opening.yMin + 0.22],
+    ["front-right", opening.xMax - 0.22, opening.yMin + 0.22],
+    ["rear-left", opening.xMin + 0.22, opening.yMax - 0.22],
+    ["rear-right", opening.xMax - 0.22, opening.yMax - 0.22]
+  ] as const) {
+    addNode(nodes, `stair-shaft-${corner}-foundation`, x, y, basementZ);
+    for (let story = 0; story <= config.stories; story += 1) {
+      addNode(nodes, `stair-shaft-${corner}-level-${story}`, x, y, story * config.storyHeightFt);
+    }
   }
   if (usesSteelSupport) {
     for (const point of steelSupportGrid) {
@@ -326,6 +396,65 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       sectionId: "schematic-floor-diaphragm",
       componentIds: story === config.stories ? [`floor-plate-${story}`] : [`floor-plate-${story}`]
     });
+  }
+  for (const corner of ["front-left", "front-right", "rear-left", "rear-right"] as const) {
+    addMember(members, {
+      id: `stair-shaft-${corner}-bearing-pad`,
+      name: `Stair shaft ${corner} foundation bearing pad`,
+      kind: "bearing-pad",
+      startNodeId: `stair-shaft-${corner}-foundation`,
+      endNodeId: `stair-shaft-${corner}-level-0`,
+      materialId: "reinforced-concrete",
+      sectionId: "schematic-bearing-pad",
+      componentIds: [`stair-shaft-bearing-pad-${corner}`, `stair-shaft-post-base-plate-${corner}`]
+    });
+    addMember(members, {
+      id: `stair-shaft-${corner}-continuous-post`,
+      name: `Stair shaft ${corner} continuous load-path post`,
+      kind: "stair-shaft-post",
+      startNodeId: `stair-shaft-${corner}-level-0`,
+      endNodeId: `stair-shaft-${corner}-level-${config.stories}`,
+      materialId: "wood-framing",
+      sectionId: "schematic-built-up-post",
+      componentIds: [`stair-shaft-continuous-load-post-${corner}`, `stair-shaft-post-cap-plate-${corner}`]
+    });
+  }
+  for (let level = 1; level <= config.stories; level += 1) {
+    const idPrefix = level === config.stories ? "roof" : `floor-${level}`;
+    for (const [edge, start, end, componentId] of [
+      ["front", "front-left", "front-right", `${idPrefix}-stair-opening-front-header`],
+      ["rear", "rear-left", "rear-right", `${idPrefix}-stair-opening-rear-header`],
+      ["left", "front-left", "rear-left", `${idPrefix}-stair-opening-left-trimmer`],
+      ["right", "front-right", "rear-right", `${idPrefix}-stair-opening-right-trimmer`]
+    ] as const) {
+      addMember(members, {
+        id: `${idPrefix}-stair-opening-${edge}-load-transfer`,
+        name: `${idPrefix} stair opening ${edge} load-transfer framing`,
+        kind: "stair-opening-header",
+        startNodeId: `stair-shaft-${start}-level-${level}`,
+        endNodeId: `stair-shaft-${end}-level-${level}`,
+        materialId: "wood-framing",
+        sectionId: "schematic-opening-header",
+        componentIds: [componentId]
+      });
+    }
+    for (const [edge, start, end, componentId] of [
+      ["front", "front-left", "front-right", `${idPrefix}-stair-opening-front-collector`],
+      ["rear", "rear-left", "rear-right", `${idPrefix}-stair-opening-rear-collector`],
+      ["left", "front-left", "rear-left", `${idPrefix}-stair-opening-left-diaphragm-blocking`],
+      ["right", "front-right", "rear-right", `${idPrefix}-stair-opening-right-diaphragm-blocking`]
+    ] as const) {
+      addMember(members, {
+        id: `${idPrefix}-stair-opening-${edge}-diaphragm-continuity`,
+        name: `${idPrefix} stair opening ${edge} diaphragm continuity member`,
+        kind: "diaphragm-collector",
+        startNodeId: `stair-shaft-${start}-level-${level}`,
+        endNodeId: `stair-shaft-${end}-level-${level}`,
+        materialId: "wood-framing",
+        sectionId: "schematic-diaphragm-collector",
+        componentIds: [componentId]
+      });
+    }
   }
   if (usesSteelSupport) {
     for (const point of steelSupportGrid) {
@@ -407,6 +536,13 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       densityPcf: 490,
       elasticModulusKsi: 29000,
       source: sources.residentialCode
+    },
+    {
+      id: "reinforced-concrete",
+      name: "Conceptual reinforced concrete bearing material",
+      densityPcf: 145,
+      elasticModulusKsi: 3600,
+      source: sources.residentialCode
     }
   ];
   const sections: StructuralSection[] = [
@@ -432,6 +568,34 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       source: sources.residentialCode
     },
     {
+      id: "schematic-opening-header",
+      name: "Schematic stair opening header/trimmer",
+      areaSqFt: 0.11,
+      momentOfInertiaFt4: 0.006,
+      source: sources.residentialCode
+    },
+    {
+      id: "schematic-diaphragm-collector",
+      name: "Schematic diaphragm collector/blocking",
+      areaSqFt: 0.05,
+      momentOfInertiaFt4: 0.002,
+      source: sources.residentialCode
+    },
+    {
+      id: "schematic-built-up-post",
+      name: "Schematic built-up wood post",
+      areaSqFt: 0.102,
+      momentOfInertiaFt4: 0.0009,
+      source: sources.residentialCode
+    },
+    {
+      id: "schematic-bearing-pad",
+      name: "Schematic reinforced concrete bearing pad",
+      areaSqFt: 1.1,
+      momentOfInertiaFt4: 0.013,
+      source: sources.residentialCode
+    },
+    {
       id: "schematic-steel-column",
       name: "Schematic steel column placeholder",
       areaSqFt: 0.028,
@@ -446,7 +610,10 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       source: sources.residentialCode
     }
   ];
-  const supports = ["fl", "fr", "rl", "rr"].map((key) => fixedSupport(`${key}-foundation`));
+  const supports = [
+    ...["fl", "fr", "rl", "rr"].map((key) => fixedSupport(`${key}-foundation`)),
+    ...["front-left", "front-right", "rear-left", "rear-right"].map((corner) => fixedSupport(`stair-shaft-${corner}-foundation`))
+  ];
   if (usesSteelSupport) {
     supports.push(...steelSupportGrid.map((point) => fixedSupport(`steel-${point.id}-foundation`)));
   }
@@ -490,6 +657,16 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
     source: sources.residentialCode
   });
   areaLoads.push({
+    id: "roof-garden-saturated-dead",
+    loadCaseId: "dead",
+    targetMemberId: "roof-diaphragm",
+    description: "Raised roof garden saturated dead-load allowance over the coordinated roof garden review zone.",
+    areaSqFt: roofGardenAreaSqFt,
+    loadPsf: roofGardenSaturatedDeadLoadPsf,
+    totalKips: loadKips(roofGardenAreaSqFt, roofGardenSaturatedDeadLoadPsf),
+    source: sources.residentialCode
+  });
+  areaLoads.push({
     id: "roof-live",
     loadCaseId: "roof-live",
     targetMemberId: "roof-diaphragm",
@@ -502,7 +679,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
 
   const floorDeadKips = loadKips(totalFloorAreaSqFt, floorDeadLoadPsf);
   const floorLiveKips = loadKips(totalFloorAreaSqFt, floorLiveLoadPsf);
-  const roofDeadKips = loadKips(roofAreaSqFt, roofDeadLoadPsf);
+  const roofDeadKips = round(loadKips(roofAreaSqFt, roofDeadLoadPsf) + loadKips(roofGardenAreaSqFt, roofGardenSaturatedDeadLoadPsf));
   const roofLiveKips = loadKips(roofAreaSqFt, roofLiveLoadPsf);
   const totalDeadLoadKips = round(floorDeadKips + roofDeadKips + wallDeadLoadKips + steelSupportDeadLoadKips);
   const totalLiveLoadKips = round(floorLiveKips + roofLiveKips);
@@ -628,7 +805,9 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       "This is a conceptual gravity-load model, not a solved structural analysis model.",
       `Floor dead load is ${floorDeadLoadPsf} psf and floor live load is ${floorLiveLoadPsf} psf.`,
       `Roof dead load is ${roofDeadLoadPsf} psf and roof live or snow allowance is ${roofLiveLoadPsf} psf.`,
+      `Raised roof garden saturated dead-load allowance is ${roofGardenSaturatedDeadLoadPsf} psf over ${roofGardenAreaSqFt} sf.`,
       "Floor diaphragm area is reduced by a schematic stair opening.",
+      "Stair opening headers, trimmers, collectors, continuous posts, base/cap plates, and bearing pads are represented as load-path members for coordination.",
       "Walls are represented as line load paths; wall openings and lintel behavior are not solved.",
       usesSteelSupport
         ? "Steel support option adds schematic interior columns, beams, and girders with a placeholder steel self-weight allowance."

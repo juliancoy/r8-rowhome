@@ -10,7 +10,17 @@ import { geometryTriangleCount } from "../src/geometry/component";
 import { estimateFacadeMaterialCost, facadeMaterialOptions } from "../src/core/facadeMaterials";
 import { facadeStyleOptions, selectedFacadeStyle } from "../src/core/facadeStyles";
 import { frontSpiralStairPlan } from "../src/generators/stairs";
-import { createFrontDoorAssembly, createWindowAssemblies, isFrontDoorLeafComponent, setFrontDoorOpen, setWindowOpen } from "../src/viewer/door";
+import {
+  createDoorAssemblies,
+  createFrontDoorAssembly,
+  createWindowAssemblies,
+  doorAssemblyForComponent,
+  isDoorLeafComponent,
+  isFrontDoorLeafComponent,
+  setDoorOpen,
+  setFrontDoorOpen,
+  setWindowOpen
+} from "../src/viewer/door";
 import { buildHouseLighting } from "../src/viewer/lighting";
 import { componentMatchesViewMode, viewLayerOptions, type ViewMode } from "../src/viewer/layers";
 import { syncRealProductModelVisibility } from "../src/viewer/productModels";
@@ -95,14 +105,20 @@ describe("rowhome generator", () => {
     expect(ids.has("overhead-light-kitchen")).toBe(true);
     expect(ids.has("floor-lamp-bulb")).toBe(true);
     expect(ids.has("air-handler-branch-circuit")).toBe(true);
-    expect(ids.has("heat-pump-disconnect")).toBe(true);
+    expect(ids.has("central-ac-disconnect")).toBe(true);
     expect(ids.has("water-heater-branch-circuit")).toBe(true);
-    expect(ids.has("heat-pump-condenser")).toBe(true);
+    expect(ids.has("central-ac-condenser")).toBe(true);
+    expect(ids.has("central-cooling-coil")).toBe(true);
     expect(ids.has("air-handler")).toBe(true);
-    expect(ids.has("floor-1-heat-pump-indoor-unit")).toBe(true);
-    expect(ids.has("floor-2-heat-pump-indoor-unit")).toBe(true);
-    expect(ids.has("floor-3-heat-pump-indoor-unit")).toBe(true);
-    expect(ids.has("floor-1-thermostat")).toBe(true);
+    expect(ids.has("floor-1-cooling-zone-terminal")).toBe(true);
+    expect(ids.has("floor-2-cooling-zone-terminal")).toBe(true);
+    expect(ids.has("floor-3-cooling-zone-terminal")).toBe(true);
+    expect(ids.has("floor-1-cooling-thermostat")).toBe(true);
+    expect(ids.has("floor-1-electric-heating-terminal")).toBe(true);
+    expect(ids.has("floor-2-electric-heating-terminal")).toBe(true);
+    expect(ids.has("floor-3-electric-heating-terminal")).toBe(true);
+    expect(ids.has("floor-1-heating-branch-circuit")).toBe(true);
+    expect([...ids].some((id) => id.includes("heat-pump-indoor-unit"))).toBe(false);
     expect(ids.has("supply-plenum")).toBe(true);
     expect(ids.has("return-plenum")).toBe(true);
     expect(ids.has("supply-branch-front-1")).toBe(true);
@@ -125,6 +141,9 @@ describe("rowhome generator", () => {
       innerWidthFt?: number;
       innerHeightFt?: number;
       wallThicknessFt?: number;
+      role?: string;
+      network?: string;
+      boundaryCondition?: string;
     });
 
     expect(ductComponents.length).toBeGreaterThanOrEqual(20);
@@ -132,11 +151,51 @@ describe("rowhome generator", () => {
     expect(flowEdges.every((edge) => typeof edge.from === "string" && typeof edge.to === "string")).toBe(true);
     expect(flowEdges.every((edge) => (edge.flowCfm ?? 0) > 0)).toBe(true);
     expect(flowEdges.every((edge) => (edge.hydraulicAreaSqFt ?? 0) > 0)).toBe(true);
+    expect(flowEdges.every((edge) => edge.network === "central-cooling-airflow" && edge.boundaryCondition && edge.boundaryCondition.length > 0)).toBe(true);
+    expect(flowEdges.some((edge) => edge.role === "supply")).toBe(true);
+    expect(flowEdges.some((edge) => edge.role === "return")).toBe(true);
     expect(flowEdges.every((edge) => (edge.innerWidthFt ?? 0) > 0 && (edge.innerHeightFt ?? 0) > 0 && (edge.wallThicknessFt ?? 0) > 0)).toBe(true);
-    expect(flowEdges.some((edge) => edge.from === "supply-plenum" && edge.to === "supply-trunk-1")).toBe(true);
+    expect(flowEdges.some((edge) => edge.from === "supply-plenum" && edge.to === "supply-plenum-takeoff")).toBe(true);
+    expect(flowEdges.some((edge) => edge.from === "supply-plenum-takeoff" && edge.to === "supply-trunk-1-takeoff")).toBe(true);
     expect(flowEdges.some((edge) => edge.from === "range-hood" && edge.to === "rear-wall-exhaust-termination")).toBe(true);
     expect(ductComponents.some((component) => component.metadata.material.includes("low-leakage galvanized sheet-metal rectangular supply duct"))).toBe(true);
     expect(ductComponents.some((component) => component.metadata.material.includes("smooth-wall rigid metal range hood exhaust duct"))).toBe(true);
+  });
+
+  it("physically connects HVAC trunks, branches, risers, plenums, registers, and return grilles", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const byId = new Map(model.components.map((component) => [component.metadata.id, component]));
+    const bounds = (id: string) => {
+      const component = byId.get(id);
+      expect(component, id).toBeDefined();
+      component!.object.updateMatrixWorld(true);
+      return new Box3().setFromObject(component!.object);
+    };
+    const expectTouching = (a: string, b: string) => {
+      expect(bounds(a).intersectsBox(bounds(b)), `${a} should physically connect to ${b}`).toBe(true);
+    };
+
+    expectTouching("supply-plenum", "supply-plenum-horizontal-takeoff");
+    expectTouching("supply-plenum-horizontal-takeoff", "supply-plenum-rise-to-trunk-1");
+    expectTouching("supply-plenum-rise-to-trunk-1", "supply-trunk-1");
+    expectTouching("return-trunk-1", "return-trunk-1-drop-to-plenum");
+    expectTouching("return-trunk-1-drop-to-plenum", "return-plenum-horizontal-transfer");
+    expectTouching("return-plenum-horizontal-transfer", "return-plenum");
+
+    for (let level = 1; level <= defaultRowhomeConfig.stories; level += 1) {
+      for (const room of ["front", "middle", "rear"]) {
+        expectTouching(`supply-branch-${room}-${level}`, `supply-trunk-${level}`);
+        expectTouching(`supply-branch-${room}-${level}`, `supply-register-${room}-${level}`);
+      }
+      expectTouching(`return-drop-zone-${level}`, `return-grille-zone-${level}`);
+      expectTouching(`return-drop-zone-${level}`, `return-trunk-${level}`);
+      if (level > 1) {
+        expectTouching(`supply-riser-${level}`, `supply-trunk-${level - 1}`);
+        expectTouching(`supply-riser-${level}`, `supply-trunk-${level}`);
+        expectTouching(`return-riser-${level}`, `return-trunk-${level}`);
+        expectTouching(`return-riser-${level}`, `return-trunk-${level - 1}`);
+      }
+    }
   });
 
   it("keeps the circuit breaker panel accessible on the first floor and connects standardized electrical parts", () => {
@@ -241,7 +300,7 @@ describe("rowhome generator", () => {
     expect(walkway?.metadata.material).toContain("paver");
     expect(irrigation?.metadata.material).toContain("drip irrigation");
     expect(reviewZone?.metadata.printable).toBe(false);
-    expect(gardenParts.every((component) => component.metadata.notes?.some((note) => note.includes("next to the photovoltaic array")))).toBe(true);
+    expect(gardenParts.every((component) => component.metadata.notes?.some((note) => note.includes("clear of the stairwell roof opening")))).toBe(true);
 
     const panelBounds = panels.map((panel) => {
       panel.object.updateMatrixWorld(true);
@@ -251,7 +310,7 @@ describe("rowhome generator", () => {
       gardenPart.object.updateMatrixWorld(true);
       const gardenBounds = new Box3().setFromObject(gardenPart.object);
       expect(gardenBounds.min.y).toBeGreaterThan(buildingHeight + 0.45);
-      expect(gardenBounds.max.x).toBeLessThan(5.15);
+      expect(gardenBounds.min.x).toBeGreaterThanOrEqual(5.15);
       expect(panelBounds.every((bounds) => !bounds.intersectsBox(gardenBounds))).toBe(true);
     }
   });
@@ -500,6 +559,7 @@ describe("rowhome generator", () => {
     const door = model.components.find((component) => component.metadata.id === "front-door")?.object as Mesh | undefined;
     expect(door?.position.x).toBeCloseTo(defaultRowhomeConfig.buildingWidthFt / 2 - 0.4);
     expect(Math.abs(door?.rotation.y ?? 0)).toBeLessThan(0.1);
+    expect(door?.visible).toBe(false);
   });
 
   it("centers front window inserts within the wall depth instead of on the exterior trim plane", () => {
@@ -539,6 +599,49 @@ describe("rowhome generator", () => {
 
     expect(assembly.isOpen).toBe(false);
     expect(movingDoorParts.every((component) => component.object.position.distanceTo(originalPositions.get(component.metadata.id)!) < 0.001)).toBe(true);
+  });
+
+  it("opens rear and roof access doors with the shared hinged door interaction class", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const assemblies = createDoorAssemblies(model.components);
+    const assemblyIds = new Set(assemblies.map((assembly) => assembly.id));
+
+    expect(assemblyIds.has("front-door")).toBe(true);
+    expect(assemblyIds.has("rear-exit-door-1")).toBe(true);
+    expect(assemblyIds.has("rear-exit-door-2")).toBe(true);
+    expect(assemblyIds.has("rear-exit-door-3")).toBe(true);
+    expect(assemblyIds.has("architect-roof-access-rated-door")).toBe(true);
+    expect(isDoorLeafComponent("rear-exit-door-1")).toBe(true);
+    expect(isDoorLeafComponent("rear-exit-door-1-panic-handle")).toBe(true);
+    expect(isDoorLeafComponent("rear-exit-door-1-frame")).toBe(false);
+    expect(isDoorLeafComponent("rear-exit-door-1-threshold")).toBe(false);
+
+    const rearDoor = model.components.find((component) => component.metadata.id === "rear-exit-door-1");
+    const rearHandle = model.components.find((component) => component.metadata.id === "rear-exit-door-1-panic-handle");
+    const rearFrame = model.components.find((component) => component.metadata.id === "rear-exit-door-1-frame")?.object as Mesh | undefined;
+    const rearAssembly = doorAssemblyForComponent(assemblies, "rear-exit-door-1");
+    const handleAssembly = doorAssemblyForComponent(assemblies, "rear-exit-door-1-panic-handle");
+    const originalDoorPosition = rearDoor?.object.position.clone();
+    const originalHandlePosition = rearHandle?.object.position.clone();
+    const originalDoorQuaternion = rearDoor?.object.quaternion.clone();
+    const originalFramePosition = rearFrame?.position.clone();
+
+    expect(rearAssembly).toBeTruthy();
+    expect(handleAssembly).toBe(rearAssembly);
+    expect(rearDoor?.object.userData.interactionClass).toBe("hinged-door");
+    expect(rearDoor?.object.userData.doorAssemblyId).toBe("rear-exit-door-1");
+
+    setDoorOpen(rearAssembly!, true);
+
+    expect(rearAssembly?.isOpen).toBe(true);
+    expect(rearDoor?.object.position.distanceTo(originalDoorPosition!)).toBeGreaterThan(0.01);
+    expect(rearDoor?.object.quaternion.angleTo(originalDoorQuaternion!)).toBeGreaterThan(0.01);
+    expect(rearHandle?.object.position.distanceTo(originalHandlePosition!)).toBeGreaterThan(0.01);
+    expect(rearFrame?.position.equals(originalFramePosition!)).toBe(true);
+
+    const roofAssembly = doorAssemblyForComponent(assemblies, "architect-roof-access-rated-door");
+    expect(roofAssembly).toBeTruthy();
+    expect(model.components.find((component) => component.metadata.id === "architect-roof-access-rated-door")?.object.userData.interactionClass).toBe("hinged-door");
   });
 
   it("opens and closes front window sash assemblies while fixed trim stays put", () => {
@@ -612,6 +715,167 @@ describe("rowhome generator", () => {
       const halfDepth = (bounds.max.z - bounds.min.z) / 2;
       expect(Math.abs(mesh.position.x - stairwellPlanPoint.x) < halfWidth && Math.abs(mesh.position.z - stairwellPlanPoint.y) < halfDepth).toBe(false);
     }
+  });
+
+  it("leaves roof and ceiling assembly openings over the stairwell", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const stairwellPoints = [
+      { x: 2.8, y: 22.0 },
+      { x: 4.85, y: 32.6 }
+    ];
+    const roofAndCeilingPieces = model.components.filter((component) =>
+      /^(ceiling-|roof-insulation-and-air-barrier|roof-garden-(drainage|paver|planter|soil|planting))/.test(component.metadata.id)
+    );
+    const blocked = stairwellPoints.flatMap((point) =>
+      roofAndCeilingPieces
+        .filter((component) => {
+          component.object.updateMatrixWorld(true);
+          const bounds = new Box3().setFromObject(component.object);
+          return point.x > bounds.min.x && point.x < bounds.max.x && point.y > bounds.min.z && point.y < bounds.max.z;
+        })
+        .map((component) => `${point.x},${point.y} blocked by ${component.metadata.id}`)
+    );
+
+    expect(blocked).toEqual([]);
+  });
+
+  it("adds visible structural support under the alternating stair flights and landings", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const ids = new Set(model.components.map((component) => component.metadata.id));
+
+    for (let floor = 1; floor <= defaultRowhomeConfig.stories; floor += 1) {
+      expect(ids.has(`stair-stringer-left-${floor}`)).toBe(true);
+      expect(ids.has(`stair-stringer-right-${floor}`)).toBe(true);
+      expect(ids.has(`stair-landing-ledger-${floor}`)).toBe(true);
+      expect(model.components.filter((component) => component.metadata.id.startsWith(`stair-post-${floor}-`)).length).toBeGreaterThanOrEqual(4);
+      expect(model.components.filter((component) => component.metadata.id.startsWith(`stair-landing-post-${floor}-`)).length).toBe(4);
+    }
+  });
+
+  it("details stair shaft fire separation, roof opening waterproofing, guards, and load paths", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const ids = new Set(model.components.map((component) => component.metadata.id));
+
+    for (const edge of ["front", "rear", "left", "right"]) {
+      expect(ids.has(`roof-stair-opening-curb-${edge}`)).toBe(true);
+      expect(ids.has(`roof-stair-opening-flashing-${edge}`)).toBe(true);
+      expect(ids.has(`roof-stair-opening-uplift-strap-${edge}`)).toBe(true);
+    }
+    for (const edge of ["front", "rear", "left"]) {
+      expect(ids.has(`roof-stair-opening-guard-${edge}`)).toBe(true);
+      expect(ids.has(`roof-stair-opening-guard-base-${edge}-a`)).toBe(true);
+      expect(ids.has(`roof-stair-opening-guard-base-${edge}-b`)).toBe(true);
+    }
+    for (const side of ["left", "right", "front", "rear"]) {
+      expect(ids.has(`stair-shaft-${side}-type-x-gypsum`)).toBe(true);
+    }
+    for (const corner of ["front-left", "front-right", "rear-left", "rear-right"]) {
+      const post = model.components.find((component) => component.metadata.id === `stair-shaft-continuous-load-post-${corner}`);
+      expect(post?.metadata.notes?.some((note) => note.includes("gravity load path"))).toBe(true);
+      expect(ids.has(`stair-shaft-post-cap-plate-${corner}`)).toBe(true);
+      expect(ids.has(`stair-shaft-post-base-plate-${corner}`)).toBe(true);
+      expect(ids.has(`stair-shaft-bearing-pad-${corner}`)).toBe(true);
+    }
+    for (let floor = 1; floor <= defaultRowhomeConfig.stories; floor += 1) {
+      const prefix = floor === defaultRowhomeConfig.stories ? "roof" : `floor-${floor}`;
+      expect(ids.has(`${prefix}-stair-opening-front-header`)).toBe(true);
+      expect(ids.has(`${prefix}-stair-opening-rear-header`)).toBe(true);
+      expect(ids.has(`${prefix}-stair-opening-left-trimmer`)).toBe(true);
+      expect(ids.has(`${prefix}-stair-opening-right-trimmer`)).toBe(true);
+      expect(ids.has(`${prefix}-stair-opening-front-collector`)).toBe(true);
+      expect(ids.has(`${prefix}-stair-opening-rear-collector`)).toBe(true);
+      expect(ids.has(`${prefix}-stair-opening-left-diaphragm-blocking`)).toBe(true);
+      expect(ids.has(`${prefix}-stair-opening-right-diaphragm-blocking`)).toBe(true);
+    }
+    expect(ids.has("structural-code-basis-and-load-schedule")).toBe(true);
+    expect(ids.has("structural-field-survey-hold-point")).toBe(true);
+    expect(ids.has("structural-special-inspection-hold-point")).toBe(true);
+    expect(ids.has("structural-signed-sealed-drawing-placeholder")).toBe(true);
+    expect(model.components.find((component) => component.metadata.id === "structural-signed-sealed-drawing-placeholder")?.metadata.printable).toBe(false);
+  });
+
+  it("implements architect logic for egress, roof access, envelope, firestopping, permit documents, and closeout", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const ids = new Set(model.components.map((component) => component.metadata.id));
+
+    for (const id of [
+      "architect-code-basis-and-zoning-matrix",
+      "architect-existing-conditions-survey-marker",
+      "architect-egress-life-safety-path",
+      "architect-roof-access-bulkhead-weatherhood",
+      "architect-roof-access-rated-door",
+      "architect-roof-membrane-turnup",
+      "architect-roof-protection-walk-pad",
+      "architect-roof-overflow-scupper",
+      "architect-stair-finish-nosing-schedule",
+      "architect-roof-threshold-transition",
+      "architect-rated-access-panel",
+      "architect-smoke-co-alarm-stair-hall",
+      "architect-emergency-lighting-stair-hall",
+      "architect-mep-roof-penetration-coordination-zone",
+      "architect-permit-document-index",
+      "architect-ahj-review-response-log",
+      "architect-construction-administration-log",
+      "architect-closeout-records",
+      "architect-temporary-weather-protection-plan"
+    ]) {
+      expect(ids.has(id), id).toBe(true);
+    }
+
+    for (let floor = 1; floor <= defaultRowhomeConfig.stories; floor += 1) {
+      expect(ids.has(`architect-stair-headroom-envelope-${floor}`)).toBe(true);
+    }
+    for (const side of ["front", "rear", "left", "right"]) {
+      expect(ids.has(`architect-curb-air-vapor-control-${side}`)).toBe(true);
+    }
+    for (const id of [
+      "architect-rated-penetration-firestop-roof-vent",
+      "architect-rated-penetration-firestop-exhaust",
+      "architect-rated-penetration-firestop-electrical"
+    ]) {
+      expect(ids.has(id)).toBe(true);
+      expect(model.components.find((component) => component.metadata.id === id)?.metadata.printable).toBe(false);
+    }
+
+    expect(model.components.find((component) => component.metadata.id === "architect-permit-document-index")?.metadata.source)
+      .toContain("dhcd-epermits-document-requirements-by-profession");
+    expect(model.components.find((component) => component.metadata.id === "architect-code-basis-and-zoning-matrix")?.metadata.notes?.some((note) => note.includes("licensed architect"))).toBe(true);
+    expect(model.components.find((component) => component.metadata.id === "architect-roof-access-bulkhead-weatherhood")?.metadata.notes?.some((note) => note.includes("roof access condition"))).toBe(true);
+    expect(model.components.find((component) => component.metadata.id === "architect-curb-air-vapor-control-front")?.metadata.source).toContain("energy-code");
+    expect(model.components.find((component) => component.metadata.id === "architect-closeout-records")?.metadata.printable).toBe(false);
+  });
+
+  it("models roof runoff with positive drainage, crickets, primary drain, overflow, and keep-clear access", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const ids = new Set(model.components.map((component) => component.metadata.id));
+
+    for (const id of [
+      "roof-drainage-high-point-front",
+      "roof-drainage-mid-slope-field",
+      "roof-drainage-low-sump-field",
+      "roof-drainage-cricket-front",
+      "roof-drainage-cricket-rear",
+      "roof-drainage-cricket-right",
+      "roof-drain-sump-pan",
+      "roof-drain-strainer",
+      "roof-overflow-scupper-rear-primary",
+      "roof-overflow-scupper-side-secondary",
+      "roof-drain-keep-clear-zone",
+      "roof-drain-leader"
+    ]) {
+      expect(ids.has(id), id).toBe(true);
+    }
+
+    const high = model.components.find((component) => component.metadata.id === "roof-drainage-high-point-front")!;
+    const mid = model.components.find((component) => component.metadata.id === "roof-drainage-mid-slope-field")!;
+    const low = model.components.find((component) => component.metadata.id === "roof-drainage-low-sump-field")!;
+    expect(high.object.position.y).toBeGreaterThan(mid.object.position.y);
+    expect(mid.object.position.y).toBeGreaterThan(low.object.position.y);
+    expect(high.object.userData.roofDrainage?.designSlopeInPerFt).toBe(0.25);
+    expect(model.components.find((component) => component.metadata.id === "roof-drain-strainer")?.object.userData.roofDrainage?.drainsTo).toBe("roof-drain-leader");
+    expect(model.components.find((component) => component.metadata.id === "roof-drain-keep-clear-zone")?.metadata.printable).toBe(false);
+    expect(model.components.find((component) => component.metadata.id === "roof-drain-keep-clear-zone")?.metadata.notes?.some((note) => note.includes("No planter"))).toBe(true);
+    expect(model.components.find((component) => component.metadata.id === "roof-overflow-scupper-rear-primary")?.object.userData.roofDrainage?.trigger).toBe("blocked-primary-drain");
   });
 
   it("supports a spiral staircase implementation option", () => {

@@ -3,6 +3,51 @@ import { sources } from "../core/sources";
 import { selectedFacadeMaterial } from "../core/facadeMaterials";
 import { box, frontWallOpenings, metadata, rearWallOpenings, wallSegmentsAroundOpenings } from "./builder";
 
+function stairOpening(config: RowhomeConfig): { xMin: number; xMax: number; yMin: number; yMax: number } {
+  if (config.stairImplementation === "spiral") {
+    return { xMin: 5.35, xMax: 12.65, yMin: 4.15, yMax: 11.45 };
+  }
+  return { xMin: 0.85, xMax: 5.15, yMin: 6.2, yMax: 35.2 };
+}
+
+function addLayerAroundStairOpening(
+  components: ModelComponent[],
+  config: RowhomeConfig,
+  baseId: string,
+  name: string,
+  category: "structure" | "roof",
+  material: string,
+  color: string,
+  thickness: number,
+  z: number,
+  source: string,
+  cost: number,
+  notes: string[]
+): void {
+  const w = config.buildingWidthFt;
+  const d = config.buildingDepthFt;
+  const opening = stairOpening(config);
+  for (const [segmentId, x0, x1, y0, y1] of [
+    ["left", 0.5, opening.xMin, 0.35, d - 0.35],
+    ["right", opening.xMax, w - 0.5, 0.35, d - 0.35],
+    ["front", opening.xMin, opening.xMax, 0.35, opening.yMin],
+    ["rear", opening.xMin, opening.xMax, opening.yMax, d - 0.35]
+  ] as const) {
+    const width = x1 - x0;
+    const depth = y1 - y0;
+    if (width <= 0.01 || depth <= 0.01) continue;
+    box(
+      components,
+      metadata(segmentId === "left" ? baseId : `${baseId}-${segmentId}`, `${name} ${segmentId} of stair opening`, category, material, source, segmentId === "left" ? cost : 0, true, notes),
+      color,
+      width,
+      depth,
+      thickness,
+      { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z }
+    );
+  }
+}
+
 export function addFireAndThermalAssemblies(
   components: ModelComponent[],
   config: RowhomeConfig,
@@ -66,23 +111,19 @@ export function addFireAndThermalAssemblies(
 
   for (let floor = 0; floor < config.stories; floor += 1) {
     const ceilingZ = (floor + 1) * config.storyHeightFt - gypsumThickness / 2;
-    box(
+    addLayerAroundStairOpening(
       components,
-      metadata(
-        `ceiling-${floor + 1}-type-x-gypsum`,
-        `Level ${floor + 1} gypsum ceiling fire membrane`,
-        floor + 1 === config.stories ? "roof" : "structure",
-        "5/8 in Type X gypsum ceiling board",
-        sources.residentialCode,
-        3100,
-        true,
-        fireAssemblyNotes
-      ),
+      config,
+      `ceiling-${floor + 1}-type-x-gypsum`,
+      `Level ${floor + 1} gypsum ceiling fire membrane`,
+      floor + 1 === config.stories ? "roof" : "structure",
+      "5/8 in Type X gypsum ceiling board",
       "#f2eadc",
-      w - 1.0,
-      d - 0.7,
       gypsumThickness,
-      { x: w / 2, y: d / 2, z: ceilingZ }
+      ceilingZ,
+      sources.residentialCode,
+      3100,
+      fireAssemblyNotes
     );
   }
 
@@ -198,26 +239,23 @@ export function addFireAndThermalAssemblies(
       { x: segment.xCenter, y: d - 0.16, z: segment.zCenter }
     );
   }
-  box(
+  addLayerAroundStairOpening(
     components,
-    metadata(
-      "roof-insulation-and-air-barrier",
-      "Roof insulation and air barrier",
-      "roof",
-      "high-R roof insulation with continuous air barrier",
-      sources.energyCode,
-      7800,
-      true,
-      [
-        ...insulationNotes,
-        "Modeled as a deep roof insulation package consistent with high-performance flat-roof practice."
-      ]
-    ),
+    config,
+    "roof-insulation-and-air-barrier",
+    "Roof insulation and air barrier",
+    "roof",
+    "high-R roof insulation with continuous air barrier",
     "#d8c782",
-    w - 1.0,
-    d - 0.7,
     roofInsulationThickness,
-    { x: w / 2, y: d / 2, z: buildingHeight - roofInsulationThickness / 2 - 0.35 }
+    buildingHeight - roofInsulationThickness / 2 - 0.35,
+    sources.energyCode,
+    7800,
+    [
+      ...insulationNotes,
+      "Modeled as a deep roof insulation package consistent with high-performance flat-roof practice.",
+      "Segmented around the stair bulkhead/opening so roof access is not blocked."
+    ]
   );
   box(
     components,

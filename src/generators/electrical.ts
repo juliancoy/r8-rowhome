@@ -275,7 +275,7 @@ export function addStandardElectricalSystem(
   );
   box(
     components,
-    metadata("heat-pump-disconnect", "Exterior heat pump disconnect", "electrical", "weatherproof HVAC disconnect switch", sources.electricalCode, 360, true, [...standardNotes, "connected to breaker-hvac and heat-pump-condenser"]),
+    metadata("central-ac-disconnect", "Exterior central AC disconnect", "electrical", "weatherproof central AC condenser disconnect switch", sources.electricalCode, 360, true, [...standardNotes, "connected to breaker-hvac and central-ac-condenser"]),
     "#4f5960",
     0.55,
     0.16,
@@ -284,7 +284,7 @@ export function addStandardElectricalSystem(
   );
   box(
     components,
-    metadata("heat-pump-branch-circuit", "Heat pump condenser branch circuit", "electrical", "10 AWG copper HVAC equipment cable in weatherproof raceway", sources.electricalCode, 620, true, [...standardNotes, "connected to breaker-hvac, heat-pump-disconnect, and heat-pump-condenser"]),
+    metadata("central-ac-condenser-branch-circuit", "Central AC condenser branch circuit", "electrical", "10 AWG copper HVAC equipment cable in weatherproof raceway", sources.electricalCode, 620, true, [...standardNotes, "connected to breaker-hvac, central-ac-disconnect, and central-ac-condenser"]),
     "#e09a35",
     0.12,
     8.2,
@@ -295,12 +295,21 @@ export function addStandardElectricalSystem(
     const level = floor + 1;
     box(
       components,
-      metadata(`floor-${level}-heater-branch-circuit`, `Floor ${level} heater branch circuit`, "electrical", "12 AWG copper heat-pump indoor-unit branch circuit", sources.electricalCode, 360, true, [...standardNotes, `connected to breaker-hvac and floor-${level}-heat-pump-indoor-unit`]),
+      metadata(`floor-${level}-cooling-control-circuit`, `Floor ${level} cooling control circuit`, "electrical", "18 AWG low-voltage central AC cooling zone control cable", sources.electricalCode, 180, true, [...standardNotes, `connected to breaker-hvac controls and floor-${level}-cooling-zone-terminal`]),
       "#e09a35",
       0.1,
       Math.max(4.0, d - 20.0),
       0.1,
       { x: w - 1.05, y: d / 2, z: floor * config.storyHeightFt + 6.6 }
+    );
+    box(
+      components,
+      metadata(`floor-${level}-heating-branch-circuit`, `Floor ${level} independent electric heating branch circuit`, "electrical", "12 AWG copper floor-independent electric heating branch circuit", sources.electricalCode, 420, true, [...standardNotes, `connected to breaker-hvac and floor-${level}-electric-heating-terminal`]),
+      "#cf7b36",
+      0.1,
+      Math.max(4.0, d - 22.0),
+      0.1,
+      { x: w - 1.22, y: d / 2, z: floor * config.storyHeightFt + 1.85 }
     );
   }
   box(

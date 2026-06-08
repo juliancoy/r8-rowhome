@@ -12,6 +12,7 @@ import urllib.request
 from pathlib import Path
 
 from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 
@@ -142,6 +143,15 @@ async def attach_error_capture(page) -> tuple[list[str], list[str], list[str]]:
     return console_messages, page_errors, failed_responses
 
 
+async def capture_screenshot(page, screenshot_name: str) -> None:
+    path = str(SCREENSHOT_DIR / screenshot_name)
+    try:
+        await page.screenshot(path=path, full_page=False, timeout=60_000, animations="disabled")
+    except PlaywrightTimeoutError:
+        canvas = page.locator("#scene")
+        await canvas.screenshot(path=path, timeout=60_000, animations="disabled")
+
+
 async def inspect_page(page, path: str, screenshot_name: str, selector: str, must_be_unhidden: bool = False) -> None:
     console_messages, page_errors, failed_responses = await attach_error_capture(page)
 
@@ -174,7 +184,7 @@ async def inspect_page(page, path: str, screenshot_name: str, selector: str, mus
     if not canvas_box or canvas_box["width"] < 300 or canvas_box["height"] < 300:
         raise AssertionError(f"Scene canvas has invalid dimensions: {canvas_box}")
 
-    await page.screenshot(path=str(SCREENSHOT_DIR / screenshot_name), full_page=False, timeout=60_000)
+    await capture_screenshot(page, screenshot_name)
     assert_no_browser_errors(console_messages, page_errors, failed_responses)
 
 
@@ -195,7 +205,7 @@ async def inspect_walkthrough(page) -> None:
         timeout=30_000,
     )
     await page.wait_for_timeout(900)
-    await page.screenshot(path=str(SCREENSHOT_DIR / "e2e-walkthrough-person.png"), full_page=False, timeout=60_000)
+    await capture_screenshot(page, "e2e-walkthrough-person.png")
     assert_no_browser_errors(console_messages, page_errors, failed_responses)
 
 

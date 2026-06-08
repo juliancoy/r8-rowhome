@@ -26,17 +26,17 @@ import { renderPanels, type PanelTab } from "./ui/panels";
 import { createPreferredRenderer, toggleRenderer, type RendererMode } from "./viewer/renderers";
 import { componentMatchesViewMode, type ViewMode } from "./viewer/layers";
 import {
-  animateFrontDoor,
+  animateDoor,
   animateWindow,
-  createFrontDoorAssemblies,
+  createDoorAssemblies,
   createWindowAssemblies,
   doorAssemblyForComponent,
-  isFrontDoorLeafComponent,
+  isDoorLeafComponent,
   isFrontWindowComponent,
-  toggleFrontDoor,
+  toggleDoor,
   toggleWindow,
   windowAssemblyForComponent,
-  type FrontDoorAssembly,
+  type DoorAssembly,
   type WindowAssembly
 } from "./viewer/door";
 import { buildHouseLighting } from "./viewer/lighting";
@@ -44,6 +44,7 @@ import { buildStructuralDemandOverlay } from "./viewer/structuralOverlay";
 import { attachRealProductModels, syncRealProductModelVisibility } from "./viewer/productModels";
 import {
   attachOccupantAsset,
+  clampFollowCameraToSameSideOfWalls,
   createOccupantAvatar,
   occupantRoutes,
   routeById,
@@ -470,7 +471,7 @@ scene.add(new GridHelper(220, 44, "#53606a", "#2c353c"));
 let isolatedComponentId: string | null = null;
 let activeViewMode: ViewMode = "all";
 let group: Group = modelGroup(model.components);
-let frontDoorAssemblies: FrontDoorAssembly[] = createFrontDoorAssemblies(model.components);
+let doorAssemblies: DoorAssembly[] = createDoorAssemblies(model.components);
 let windowAssemblies: WindowAssembly[] = createWindowAssemblies(model.components);
 scene.add(group);
 attachRealProductModels(group, model.components, viewOptions.renderDetail !== "fast", activeViewMode, isolatedComponentId);
@@ -631,7 +632,7 @@ function rebuildModel(nextConfig: RowhomeConfig): void {
   scene.remove(structuralDemandOverlay);
   model = generateRowhome(currentConfig);
   group = modelGroup(model.components);
-  frontDoorAssemblies = createFrontDoorAssemblies(model.components);
+  doorAssemblies = createDoorAssemblies(model.components);
   windowAssemblies = createWindowAssemblies(model.components);
   scene.add(group);
   attachRealProductModels(group, model.components, viewOptions.renderDetail !== "fast", activeViewMode, isolatedComponentId);
@@ -662,8 +663,8 @@ function updateFlightHud(): void {
 }
 
 function animateOpenings(deltaSeconds: number): void {
-  for (const assembly of frontDoorAssemblies) {
-    animateFrontDoor(assembly, deltaSeconds);
+  for (const assembly of doorAssemblies) {
+    animateDoor(assembly, deltaSeconds);
   }
   for (const assembly of windowAssemblies) {
     animateWindow(assembly, deltaSeconds);
@@ -780,9 +781,12 @@ async function boot(): Promise<void> {
       return;
     }
     const side = new Vector3(-direction.z, 0, direction.x).normalize();
-    const cameraOffset = direction.clone().multiplyScalar(-9).add(side.multiplyScalar(3.2)).add(new Vector3(0, 4.8, 0));
-    camera.position.lerp(position.clone().add(cameraOffset), 0.08);
-    const target = position.clone().add(new Vector3(0, 2.2, 0)).add(direction.clone().multiplyScalar(4));
+    const cameraOffset = direction.clone().multiplyScalar(-5.8).add(side.multiplyScalar(1.7)).add(new Vector3(0, 3.4, 0));
+    const focusPoint = position.clone().add(new Vector3(0, 2.0, 0));
+    const desiredCameraPosition = focusPoint.clone().add(cameraOffset);
+    const clampedCameraPosition = clampFollowCameraToSameSideOfWalls(focusPoint, desiredCameraPosition, model.components);
+    camera.position.lerp(clampedCameraPosition, 0.14);
+    const target = focusPoint.clone().add(direction.clone().multiplyScalar(3.2));
     camera.lookAt(target);
     orbitControls?.target.lerp(target, 0.12);
     syncLookAnglesFromCamera();
@@ -927,7 +931,9 @@ async function boot(): Promise<void> {
       occupantAvatar,
       routeById(currentConfig, walkthroughState.routeId),
       walkthroughState,
-      deltaSeconds
+      deltaSeconds,
+      currentConfig,
+      model.components
     );
     occupantAsset.update(deltaSeconds);
     focusCameraOnOccupant(occupantSample.position, occupantSample.direction);
@@ -1086,10 +1092,10 @@ async function boot(): Promise<void> {
       return;
     }
     selection.textContent = selected.metadata.name;
-    if (isFrontDoorLeafComponent(selected.metadata.id)) {
-      const assembly = doorAssemblyForComponent(frontDoorAssemblies, selected.metadata.id);
+    if (isDoorLeafComponent(selected.metadata.id)) {
+      const assembly = doorAssemblyForComponent(doorAssemblies, selected.metadata.id);
       if (assembly) {
-        toggleFrontDoor(assembly);
+        toggleDoor(assembly);
         selection.textContent = assembly.isOpen ? "Door opening" : "Door closing";
       }
       return;

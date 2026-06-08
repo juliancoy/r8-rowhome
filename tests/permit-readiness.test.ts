@@ -28,12 +28,14 @@ describe("permit readiness and preliminary calculations", () => {
     expect(calculation.status).toBe("preliminary-not-manual-j");
     expect(calculation.conditionedAreaSqFt).toBeGreaterThan(2000);
     expect(calculation.coolingTons).toBeGreaterThan(3);
-    expect(calculation.heatingZones).toHaveLength(defaultRowhomeConfig.stories);
-    expect(calculation.heatingZones.every((zone) => zone.heaterId.includes("heat-pump-indoor-unit"))).toBe(true);
+    expect(calculation.coolingZones).toHaveLength(defaultRowhomeConfig.stories);
+    expect(calculation.coolingZones.every((zone) => zone.terminalId.includes("cooling-zone-terminal"))).toBe(true);
+    expect(calculation.coolingZones.every((zone) => zone.designSupplyCfm > 0)).toBe(true);
     expect(calculation.modeledSupplyCfm).toBeGreaterThan(900);
     expect(calculation.modeledReturnCfm).toBeGreaterThan(900);
-    expect(calculation.missingInputs).toContain("Manual J room-by-room heating and cooling load");
-    expect(calculation.missingInputs).toContain("floor-by-floor heat-loss and heat-gain allocation");
+    expect(calculation.missingInputs).toContain("Manual J room-by-room cooling load");
+    expect(calculation.missingInputs).toContain("floor-by-floor cooling load and airflow allocation");
+    expect(calculation.missingInputs).toContain("CFD/fluid boundary conditions if using this model for airflow simulation");
   });
 
   it("builds preliminary plumbing fixture-unit tracking without claiming permit sizing", () => {
@@ -58,6 +60,12 @@ describe("permit readiness and preliminary calculations", () => {
     expect(report.preliminaryCalculations.electrical.status).toBe("preliminary-not-for-permit");
     expect(report.preliminaryCalculations.hvac.status).toBe("preliminary-not-manual-j");
     expect(report.preliminaryCalculations.plumbing.status).toBe("preliminary-not-for-permit");
+    expect(report.constructionDocuments.status).toBe("preflight-not-construction-documents");
+    expect(report.constructionDocuments.buildTomorrowReady).toBe(false);
+    expect(report.constructionDocuments.sheetIndex.some((sheet) => sheet.id === "A103")).toBe(true);
+    expect(report.requiredNextActions).toContain("complete architectural code, zoning, accessibility, preservation, and life-safety analysis");
+    expect(report.requiredNextActions).toContain("coordinate stair geometry, roof access, waterproofing, envelope continuity, fire separation, and MEP penetrations");
+    expect(report.requiredNextActions).toContain("administer submittals, RFIs, field observations, inspections, and closeout documentation");
     expect(report.requiredNextActions).toContain("build only from approved documents");
   });
 });

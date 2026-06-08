@@ -45,6 +45,81 @@ function center(bounds: Bounds): Vector3 {
 }
 
 describe("rowhome collision checks", () => {
+  it("keeps rooftop equipment visibly above roof finish and drainage layers", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const roofFinish = model.components.filter((component) =>
+      /^(roof-insulation-and-air-barrier|roof-drainage-)/.test(component.metadata.id)
+    );
+    const roofFinishTop = Math.max(...roofFinish.map((component) => boundsFor(component).max.y));
+    const rooftopEquipment = model.components.filter((component) =>
+      /^(roof-solar-(panel|frame|rack|rear-rack)-|roof-solar-combiner|roof-solar-dc-raceway)/.test(component.metadata.id)
+    );
+    const buried = rooftopEquipment
+      .filter((component) => boundsFor(component).min.y < roofFinishTop - 0.03)
+      .map((component) => `${component.metadata.id} below roof finish top ${roofFinishTop.toFixed(2)}`);
+
+    expect(buried).toEqual([]);
+  });
+
+  it("uses full-height rear door jambs around every rear egress opening", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const gaps: string[] = [];
+
+    for (let level = 1; level <= defaultRowhomeConfig.stories; level += 1) {
+      const door = model.components.find((component) => component.metadata.id === `rear-exit-door-${level}`);
+      const header = model.components.find((component) => component.metadata.id === `rear-exit-door-${level}-frame`);
+      const left = model.components.find((component) => component.metadata.id === `rear-exit-door-${level}-left-jamb`);
+      const right = model.components.find((component) => component.metadata.id === `rear-exit-door-${level}-right-jamb`);
+      const threshold = model.components.find((component) => component.metadata.id === `rear-exit-door-${level}-threshold`);
+      if (!door || !header || !left || !right || !threshold) {
+        gaps.push(`rear door ${level} missing door/frame/threshold parts`);
+        continue;
+      }
+      const doorBounds = boundsFor(door);
+      const headerBounds = boundsFor(header);
+      const leftBounds = boundsFor(left);
+      const rightBounds = boundsFor(right);
+      const thresholdBounds = boundsFor(threshold);
+
+      if (leftBounds.min.y > doorBounds.min.y + 0.05 || leftBounds.max.y < doorBounds.max.y - 0.05) gaps.push(`rear door ${level} left jamb not full height`);
+      if (rightBounds.min.y > doorBounds.min.y + 0.05 || rightBounds.max.y < doorBounds.max.y - 0.05) gaps.push(`rear door ${level} right jamb not full height`);
+      if (leftBounds.max.x > doorBounds.min.x + 0.05) gaps.push(`rear door ${level} left jamb intrudes into leaf`);
+      if (rightBounds.min.x < doorBounds.max.x - 0.05) gaps.push(`rear door ${level} right jamb intrudes into leaf`);
+      if (headerBounds.min.y > doorBounds.max.y + 0.2 || headerBounds.max.x < doorBounds.max.x || headerBounds.min.x > doorBounds.min.x) gaps.push(`rear door ${level} header does not span top opening`);
+      if (thresholdBounds.max.y < doorBounds.min.y - 0.02 || thresholdBounds.min.x > doorBounds.min.x || thresholdBounds.max.x < doorBounds.max.x) gaps.push(`rear door ${level} threshold does not span opening`);
+    }
+
+    expect(gaps).toEqual([]);
+  });
+
+  it("runs a broad critical collision pass across all modeled components", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const components = model.components.filter((component) => component.metadata.printable);
+    const bounds = new Map(components.map((component) => [component.metadata.id, boundsFor(component)]));
+    const suspected: string[] = [];
+
+    const isCriticalPair = (a: ModelComponent, b: ModelComponent): boolean => {
+      const pair = `${a.metadata.id} ${b.metadata.id}`;
+      if (/roof-solar-(panel|frame|rack|rear-rack)-/.test(pair) && /roof-(insulation|drainage|garden)/.test(pair)) return true;
+      if (/rear-exit-door-\d+\b/.test(pair) && /rear-wall/.test(pair)) return true;
+      if (/central-ac-condenser/.test(pair) && /fire-escape/.test(pair)) return true;
+      if (/stair-(tread|riser|landing)/.test(pair) && /floor-plate/.test(pair)) return true;
+      return false;
+    };
+
+    for (let i = 0; i < components.length; i += 1) {
+      for (let j = i + 1; j < components.length; j += 1) {
+        const first = components[i];
+        const second = components[j];
+        if (isCriticalPair(first, second) && intersects(bounds.get(first.metadata.id)!, bounds.get(second.metadata.id)!, 0.03)) {
+          suspected.push(collisionLabels(first, second));
+        }
+      }
+    }
+
+    expect(suspected).toEqual([]);
+  });
+
   it("keeps stair and fire escape components clear of wall and foundation geometry", () => {
     const configs = [
       defaultRowhomeConfig,
@@ -232,20 +307,20 @@ describe("rowhome collision checks", () => {
 
   it("keeps exterior equipment clear of the building shell", () => {
     const model = generateRowhome(defaultRowhomeConfig);
-    const condenser = model.components.find((component) => component.metadata.id === "heat-pump-condenser");
+    const condenser = model.components.find((component) => component.metadata.id === "central-ac-condenser");
     const shell = model.components.filter((component) =>
       /^(party-wall-|rear-wall|front-facade|basement-(party-wall|front-foundation|rear-foundation))/.test(component.metadata.id)
     );
     const collisions = condenser
       ? shell.filter((component) => intersects(boundsFor(condenser), boundsFor(component), 0.04)).map((component) => collisionLabels(condenser, component))
-      : ["missing heat-pump-condenser"];
+      : ["missing central-ac-condenser"];
 
     expect(collisions).toEqual([]);
   });
 
   it("keeps the fire escape clear of exterior HVAC equipment", () => {
     const model = generateRowhome(defaultRowhomeConfig);
-    const exteriorEquipment = model.components.filter((component) => /^(heat-pump-condenser|condenser-pad)$/.test(component.metadata.id));
+    const exteriorEquipment = model.components.filter((component) => /^(central-ac-condenser|condenser-pad)$/.test(component.metadata.id));
     const fireEscape = model.components.filter((component) => /^fire-escape-/.test(component.metadata.id));
     const collisions = exteriorEquipment.flatMap((equipment) =>
       fireEscape

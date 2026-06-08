@@ -15,11 +15,16 @@ describe("conceptual structural gravity model", () => {
     expect(structural.nodes.length).toBeGreaterThan(20);
     expect(structural.members.some((member) => member.kind === "floor-diaphragm")).toBe(true);
     expect(structural.members.some((member) => member.kind === "roof-diaphragm")).toBe(true);
-    expect(structural.supports).toHaveLength(4);
+    expect(structural.members.some((member) => member.kind === "stair-opening-header")).toBe(true);
+    expect(structural.members.some((member) => member.kind === "stair-shaft-post")).toBe(true);
+    expect(structural.members.some((member) => member.kind === "diaphragm-collector")).toBe(true);
+    expect(structural.members.some((member) => member.kind === "bearing-pad")).toBe(true);
+    expect(structural.supports).toHaveLength(8);
     expect(structural.supports.every((support) => support.restraint.z)).toBe(true);
     expect(structural.loadCases.map((loadCase) => loadCase.id)).toEqual(["dead", "floor-live", "roof-live"]);
-    expect(structural.areaLoads.length).toBe(defaultRowhomeConfig.stories * 2 + 2);
+    expect(structural.areaLoads.length).toBe(defaultRowhomeConfig.stories * 2 + 3);
     expect(structural.areaLoads.every((load) => load.totalKips > 0 && load.source.length > 0)).toBe(true);
+    expect(structural.areaLoads.some((load) => load.id === "roof-garden-saturated-dead" && load.loadPsf === 35)).toBe(true);
     expect(structural.demandSurfaces.length).toBeGreaterThan(defaultRowhomeConfig.stories + 1 + defaultRowhomeConfig.stories * 4);
     expect(structural.demandSurfaces.every((surface) => surface.intensity >= 0 && surface.intensity <= 1)).toBe(true);
     expect(structural.demandSurfaces.some((surface) => surface.kind === "roof-area" && surface.demandKips > 0)).toBe(true);
@@ -42,6 +47,10 @@ describe("conceptual structural gravity model", () => {
     expect(structural.loadCombinations.some((combination) => combination.id === "strength-floor-live" && combination.totalKips > structural.gravityReport.totalDeadLoadKips)).toBe(true);
     expect(structural.loadCombinations.some((combination) => combination.status === "blocked-requires-lateral-model")).toBe(true);
     expect(structural.designChecks.some((check) => check.id === "foundation-bearing" && check.status === "blocked-requires-design-input")).toBe(true);
+    expect(structural.designChecks.some((check) => check.id === "stair-opening-load-path" && check.targetIds.length > 0)).toBe(true);
+    expect(structural.designChecks.some((check) => check.id === "diaphragm-collector-continuity" && check.targetIds.length > 0)).toBe(true);
+    expect(structural.designChecks.some((check) => check.id === "guard-attachment-loads")).toBe(true);
+    expect(structural.designChecks.some((check) => check.id === "roof-curb-uplift-waterproofing")).toBe(true);
     expect(structural.solverStatus.readyForSolver).toBe(false);
   });
 
@@ -91,7 +100,7 @@ describe("conceptual structural gravity model", () => {
     expect(structural?.materials.some((material) => material.id === "structural-steel")).toBe(true);
     expect(structural?.members.some((member) => member.kind === "steel-column")).toBe(true);
     expect(structural?.members.some((member) => member.kind === "steel-beam")).toBe(true);
-    expect(structural?.supports.length).toBe(8);
+    expect(structural?.supports.length).toBe(12);
     expect(structural?.gravityReport.steelSupportDeadLoadKips).toBeGreaterThan(0);
     expect(structural?.assumptions.some((assumption) => assumption.includes("Steel support option"))).toBe(true);
     expect(structural?.designChecks.some((check) => check.id === "steel-column-buckling")).toBe(true);

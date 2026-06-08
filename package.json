@@ -16,11 +16,17 @@
     "hvac:fem": "node scripts/run-hvac-fem.mjs && vitest run tests/hvac-flow-report.test.ts",
     "plumbing:fluid": "node scripts/run-plumbing-fluid.mjs && vitest run tests/plumbing-flow-report.test.ts",
     "permit:readiness": "node scripts/run-permit-readiness.mjs && vitest run tests/permit-readiness.test.ts",
+    "deficiencies:resolve": "node scripts/run-deficiency-resolution.mjs && vitest run tests/deficiency-resolution.test.ts",
+    "construction:preflight": "node scripts/run-construction-documents.mjs && vitest run tests/construction-documents.test.ts",
+    "collision:audit": "node scripts/run-collision-audit.mjs && vitest run tests/collision-audit.test.ts",
+    "print:preflight": "node scripts/run-print-preflight.mjs && vitest run tests/print-preflight.test.ts",
+    "documents:organize": "node scripts/run-document-organization.mjs && vitest run tests/document-organization.test.ts",
     "livability:walkthrough": "node scripts/run-livability-walkthrough.mjs && vitest run tests/livability-walkthrough.test.ts",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run"
   },
   "dependencies": {
+    "cannon-es": "^0.20.0",
     "three": "^0.184.0"
   },
   "devDependencies": {

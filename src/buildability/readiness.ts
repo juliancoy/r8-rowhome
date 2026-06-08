@@ -40,18 +40,33 @@ export function buildBuildabilityReadiness(model: RowhomeModel): BuildabilityRea
     {
       id: "architecture-program-modeled",
       discipline: "architecture",
-      status: hasComponent(model, "front-door") && hasComponent(model, "rear-exit-door-1") ? "model-supported" : "blocked",
-      requirement: "Concept model includes rooms, primary entry, rear exits, stairs, and visible rowhome facade intent.",
-      evidence: ["front-door", "rear-exit-door-1", "stair-run-1", "living-room-zone", "kitchen-room-zone"].filter((id) => hasComponent(model, id)),
+      status: hasComponent(model, "front-door") && hasComponent(model, "rear-exit-door-1") && hasComponent(model, "architect-egress-life-safety-path") ? "model-supported" : "blocked",
+      requirement: "Concept model includes rooms, primary entry, rear exits, stairs, visible rowhome facade intent, and architectural egress coordination markers.",
+      evidence: ["front-door", "rear-exit-door-1", "stair-run-1", "living-room-zone", "kitchen-room-zone", "architect-egress-life-safety-path", "architect-stair-headroom-envelope-1"].filter((id) => hasComponent(model, id)),
       missingInputs: [],
       source: sources.r8
     },
     {
+      id: "architect-roof-envelope-coordination-modeled",
+      discipline: "architecture",
+      status: hasComponent(model, "architect-roof-access-bulkhead-weatherhood") && hasComponent(model, "architect-roof-membrane-turnup") ? "model-supported" : "blocked",
+      requirement: "Concept model includes architectural roof access, membrane, drainage, envelope continuity, and protected penetration coordination markers.",
+      evidence: [
+        "architect-roof-access-bulkhead-weatherhood",
+        "architect-roof-membrane-turnup",
+        "architect-curb-air-vapor-control-front",
+        "architect-rated-penetration-firestop-roof-vent",
+        "architect-mep-roof-penetration-coordination-zone"
+      ].filter((id) => hasComponent(model, id)),
+      missingInputs: [],
+      source: sources.permitDocuments
+    },
+    {
       id: "all-electric-systems-modeled",
       discipline: "electrical",
-      status: hasComponent(model, "electrical-panel") && hasComponent(model, "heat-pump-condenser") && hasComponent(model, "electric-water-heater") && hasComponent(model, "lithium-ion-battery") ? "model-supported" : "blocked",
-      requirement: "Concept model remains all-electric and includes electrical service, floor-zoned HVAC equipment, electric water heating, PV, and lithium-ion storage.",
-      evidence: ["electrical-panel", "heat-pump-condenser", "floor-1-heat-pump-indoor-unit", "floor-2-heat-pump-indoor-unit", "floor-3-heat-pump-indoor-unit", "electric-water-heater", "electric-range", "lithium-ion-battery", "pv-hybrid-inverter"].filter((id) => hasComponent(model, id)),
+      status: hasComponent(model, "electrical-panel") && hasComponent(model, "central-ac-condenser") && hasComponent(model, "electric-water-heater") && hasComponent(model, "lithium-ion-battery") ? "model-supported" : "blocked",
+      requirement: "Concept model remains all-electric and includes electrical service, centralized AC cooling airflow equipment, electric water heating, PV, and lithium-ion storage.",
+      evidence: ["electrical-panel", "central-ac-condenser", "air-handler", "central-cooling-coil", "floor-1-cooling-zone-terminal", "floor-2-cooling-zone-terminal", "floor-3-cooling-zone-terminal", "electric-water-heater", "electric-range", "lithium-ion-battery", "pv-hybrid-inverter"].filter((id) => hasComponent(model, id)),
       missingInputs: [],
       source: sources.electricalCode
     },
@@ -68,10 +83,26 @@ export function buildBuildabilityReadiness(model: RowhomeModel): BuildabilityRea
       id: "sealed-architectural-drawings-required",
       discipline: "architecture",
       status: "blocked",
-      requirement: "Permit-ready architectural drawings, schedules, details, and code analysis must be prepared and reviewed.",
-      evidence: ["conceptual generator output only"],
-      missingInputs: ["dimensioned drawings", "life-safety and egress analysis", "door/window schedules", "wall sections", "specifications", "professional review"],
-      source: "legal_procedure.md"
+      requirement: "Permit-ready architectural drawings, schedules, details, specifications, code analysis, AHJ responses, and closeout requirements must be prepared and reviewed.",
+      evidence: [
+        "architect-code-basis-and-zoning-matrix",
+        "architect-permit-document-index",
+        "architect-ahj-review-response-log",
+        "architect-construction-administration-log",
+        "architect-closeout-records"
+      ].filter((id) => hasComponent(model, id)),
+      missingInputs: [
+        "dimensioned drawings",
+        "life-safety and egress analysis",
+        "door/window schedules",
+        "wall sections",
+        "waterproofing details",
+        "rated assembly details",
+        "specifications",
+        "AHJ approval",
+        "licensed architect review"
+      ],
+      source: sources.permitDocuments
     },
     {
       id: "structural-design-required",
@@ -95,9 +126,9 @@ export function buildBuildabilityReadiness(model: RowhomeModel): BuildabilityRea
       id: "hvac-design-required",
       discipline: "hvac",
       status: "blocked",
-      requirement: "HVAC design must size per-floor heating equipment, ducts/air distribution, ventilation, controls, and commissioning requirements.",
-      evidence: hasComponent(model, "floor-1-heat-pump-indoor-unit") ? ["schematic per-floor heating zones exist"] : [],
-      missingInputs: ["Manual J", "floor-by-floor heat-loss allocation", "Manual S", "Manual D", "ventilation calculation", "static pressure calculation", "balancing and commissioning requirements"],
+      requirement: "HVAC design must size central cooling equipment, ducts/air distribution, ventilation, controls, fluid/airflow boundary conditions, and commissioning requirements.",
+      evidence: hasComponent(model, "floor-1-cooling-zone-terminal") ? ["schematic central cooling airflow zones exist"] : [],
+      missingInputs: ["Manual J cooling loads", "floor-by-floor cooling airflow allocation", "Manual S", "Manual D", "ventilation calculation", "static pressure calculation", "CFD/fluid boundary conditions", "balancing and commissioning requirements"],
       source: "sources/code-building-codes-part-v-international-mechanical-code-full.html"
     },
     {

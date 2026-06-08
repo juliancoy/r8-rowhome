@@ -5,6 +5,7 @@ import { buildElectricalLoadCalculation } from "../calculations/electricalLoad";
 import { buildHvacSizingCalculation } from "../calculations/hvacSizing";
 import { buildPlumbingFixtureUnitCalculation } from "../calculations/plumbingFixtureUnits";
 import { generateRowhome } from "../generators/rowhome";
+import { buildConstructionDocumentPreflightReport } from "./constructionDocuments";
 
 export function buildPermitReadinessReport(
   generatedAt = new Date().toISOString(),
@@ -15,6 +16,7 @@ export function buildPermitReadinessReport(
   const electrical = buildElectricalLoadCalculation(model, config);
   const hvac = buildHvacSizingCalculation(model, config);
   const plumbing = buildPlumbingFixtureUnitCalculation(model);
+  const constructionDocuments = buildConstructionDocumentPreflightReport(generatedAt, model, config);
 
   return {
     generatedAt,
@@ -27,12 +29,17 @@ export function buildPermitReadinessReport(
       hvac,
       plumbing
     },
+    constructionDocuments,
     requiredNextActions: [
       "commission site survey and property/legal review",
       "engage licensed architect and engineers",
+      "complete architectural code, zoning, accessibility, preservation, and life-safety analysis",
+      "coordinate stair geometry, roof access, waterproofing, envelope continuity, fire separation, and MEP penetrations",
       "prepare permit drawings and specifications",
+      "submit architectural drawing set and respond to AHJ plan-review comments",
       "complete structural, electrical, HVAC, plumbing, energy, and site calculations",
       "submit to authority having jurisdiction",
+      "administer submittals, RFIs, field observations, inspections, and closeout documentation",
       "build only from approved documents"
     ]
   };

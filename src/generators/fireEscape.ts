@@ -140,6 +140,20 @@ export function addRearExitAndFireEscape(components: ModelComponent[], config: R
       0.2,
       { x: w / 2, y: d + 0.66, z: baseZ + 7.45 }
     );
+    for (const [side, x] of [["left", w / 2 - 1.72], ["right", w / 2 + 1.72]] as const) {
+      box(
+        components,
+        metadata(`rear-exit-door-${level}-${side}-jamb`, `Rear exit door ${side} jamb level ${level}`, "facade", "painted steel full-height door jamb", sources.residentialCode, 360, true, [
+          ...notes,
+          "Full-height jamb completes the rear egress door frame around the rough opening."
+        ]),
+        "#d7d0bf",
+        0.22,
+        0.28,
+        7.35,
+        { x, y: d + 0.67, z: baseZ + 3.78 }
+      );
+    }
     box(
       components,
       metadata(`rear-exit-door-${level}-threshold`, `Rear exit threshold level ${level}`, "facade", "metal sill and threshold", sources.residentialCode, 260, true, notes),

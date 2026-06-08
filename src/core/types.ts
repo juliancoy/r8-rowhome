@@ -77,7 +77,17 @@ export interface StructuralNode {
   zFt: number;
 }
 
-export type StructuralMemberKind = "wall-line" | "floor-diaphragm" | "roof-diaphragm" | "foundation-line" | "steel-column" | "steel-beam";
+export type StructuralMemberKind =
+  | "wall-line"
+  | "floor-diaphragm"
+  | "roof-diaphragm"
+  | "foundation-line"
+  | "stair-opening-header"
+  | "stair-shaft-post"
+  | "diaphragm-collector"
+  | "bearing-pad"
+  | "steel-column"
+  | "steel-beam";
 
 export interface StructuralMember {
   id: string;
