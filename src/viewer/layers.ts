@@ -104,7 +104,7 @@ export function componentMatchesViewMode(component: ModelComponent, viewMode: Vi
     return component.metadata.category === "electrical" || /\b(electric|electrical|panelboard|breaker|load center|junction box|device box|switch box|receptacle|copper|awg|nm-b|service mast|weatherhead|meter|disconnect|conduit|raceway|bus bar|outlet)\b/.test(text);
   }
   if (viewMode === "hvac") {
-    return /\b(heat pump|air handler|duct|register|exhaust|refrigerant|lineset|ventilation|cooling|heating|condenser)\b/.test(text);
+    return /\b(heat pump|air handler|plenum|duct|register|exhaust|refrigerant|lineset|ventilation|cooling|heating|condenser)\b/.test(text);
   }
   if (viewMode === "plumbing") {
     return /\b(plumbing|water service|hot water|cold water|sanitary|dwv|vent stack|storm drain|condensate|pipe|lavatory|toilet|shower|water closet|backflow|manifold|sump|drain|faucet)\b/.test(text);

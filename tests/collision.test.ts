@@ -4,6 +4,7 @@ import { defaultRowhomeConfig } from "../src/core/config";
 import type { ModelComponent } from "../src/core/types";
 import { generateRowhome } from "../src/generators/rowhome";
 import { frontSpiralStairPlan } from "../src/generators/stairs";
+import { collidesWithNavigation, navigationBoundsForComponents, nathanNavigationOptions, resolveNavigationMove } from "../src/viewer/navigation";
 
 interface Bounds {
   min: Vector3;
@@ -118,6 +119,45 @@ describe("rowhome collision checks", () => {
     }
 
     expect(suspected).toEqual([]);
+  });
+
+  it("keeps Nathan from tunneling through house walls during fly movement", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const blockers = navigationBoundsForComponents(model.components);
+    const leftPartyWall = blockers.find((blocker) => blocker.id === "party-wall-left");
+
+    expect(leftPartyWall).toBeDefined();
+    const start = new Vector3(
+      leftPartyWall!.bounds.max.x + nathanNavigationOptions.radiusFt + 0.25,
+      6.2,
+      defaultRowhomeConfig.buildingDepthFt / 2
+    );
+    const attemptedOutsideMove = new Vector3(
+      leftPartyWall!.bounds.min.x - nathanNavigationOptions.radiusFt - 2.5,
+      start.y,
+      start.z
+    );
+
+    const resolved = resolveNavigationMove(start, attemptedOutsideMove, blockers);
+
+    expect(collidesWithNavigation(resolved, blockers)).toBe(false);
+    expect(resolved.x).toBeGreaterThanOrEqual(leftPartyWall!.bounds.max.x + nathanNavigationOptions.radiusFt - 0.02);
+  });
+
+  it("unsticks Nathan from an invalid pose inside a wall instead of leaving him glitched", () => {
+    const model = generateRowhome(defaultRowhomeConfig);
+    const blockers = navigationBoundsForComponents(model.components);
+    const leftPartyWall = blockers.find((blocker) => blocker.id === "party-wall-left");
+
+    expect(leftPartyWall).toBeDefined();
+    const wallCenter = leftPartyWall!.bounds.getCenter(new Vector3());
+    const glitchedPose = new Vector3(wallCenter.x, 6.2, defaultRowhomeConfig.buildingDepthFt / 2);
+    const desiredMove = glitchedPose.clone().add(new Vector3(0, 0, 1.0));
+
+    const resolved = resolveNavigationMove(glitchedPose, desiredMove, blockers);
+
+    expect(collidesWithNavigation(resolved, blockers)).toBe(false);
+    expect(resolved.distanceTo(glitchedPose)).toBeGreaterThan(0.1);
   });
 
   it("keeps stair and fire escape components clear of wall and foundation geometry", () => {

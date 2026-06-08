@@ -42,6 +42,7 @@ import {
 import { buildHouseLighting } from "./viewer/lighting";
 import { buildStructuralDemandOverlay } from "./viewer/structuralOverlay";
 import { attachRealProductModels, syncRealProductModelVisibility } from "./viewer/productModels";
+import { navigationBoundsForComponents, resolveNavigationMove, type NavigationBounds } from "./viewer/navigation";
 import {
   attachOccupantAsset,
   clampFollowCameraToSameSideOfWalls,
@@ -202,9 +203,9 @@ const defaultViewOptions: ViewOptions = {
   dragSensitivity: 0.003,
   ambientLightIntensity: 1.8,
   roomLightIntensity: 2,
-  renderDetail: "fast"
+  renderDetail: "balanced"
 };
-const appOptionsStorageKey = "r8-rowhome.options.v1";
+const appOptionsStorageKey = "r8-rowhome.options.v2";
 
 interface StoredAppOptions {
   config: RowhomeConfig;
@@ -242,7 +243,7 @@ function loadStoredAppOptions(): StoredAppOptions {
         roomLightIntensity: finiteNumber(storedViewOptions.roomLightIntensity, defaultViewOptions.roomLightIntensity),
         renderDetail: storedViewOptions.renderDetail === "balanced" || storedViewOptions.renderDetail === "detailed"
           ? storedViewOptions.renderDetail
-          : "fast"
+          : defaultViewOptions.renderDetail
       }
     };
   } catch {
@@ -473,6 +474,7 @@ let activeViewMode: ViewMode = "all";
 let group: Group = modelGroup(model.components);
 let doorAssemblies: DoorAssembly[] = createDoorAssemblies(model.components);
 let windowAssemblies: WindowAssembly[] = createWindowAssemblies(model.components);
+let navigationBlockers: NavigationBounds[] = navigationBoundsForComponents(model.components);
 scene.add(group);
 attachRealProductModels(group, model.components, viewOptions.renderDetail !== "fast", activeViewMode, isolatedComponentId);
 let houseLights: Group = buildHouseLighting(model, viewOptions.roomLightIntensity);
@@ -634,6 +636,7 @@ function rebuildModel(nextConfig: RowhomeConfig): void {
   group = modelGroup(model.components);
   doorAssemblies = createDoorAssemblies(model.components);
   windowAssemblies = createWindowAssemblies(model.components);
+  navigationBlockers = navigationBoundsForComponents(model.components);
   scene.add(group);
   attachRealProductModels(group, model.components, viewOptions.renderDetail !== "fast", activeViewMode, isolatedComponentId);
   houseLights = buildHouseLighting(model, viewOptions.roomLightIntensity);
@@ -838,8 +841,11 @@ async function boot(): Promise<void> {
   }
 
   function moveCameraAndTarget(delta: Vector3): void {
-    camera.position.add(delta);
-    orbitControls?.target.add(delta);
+    const previousPosition = camera.position.clone();
+    const nextPosition = resolveNavigationMove(previousPosition, previousPosition.clone().add(delta), navigationBlockers);
+    const resolvedDelta = nextPosition.sub(previousPosition);
+    camera.position.add(resolvedDelta);
+    orbitControls?.target.add(resolvedDelta);
   }
 
   function applyFlyMovement(deltaSeconds: number): void {

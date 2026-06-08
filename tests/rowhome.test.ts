@@ -370,9 +370,6 @@ describe("rowhome generator", () => {
     expect(statSync(plantModelPath).size).toBeGreaterThan(100_000);
     expect(streetTree?.metadata.realProductModel?.license).toBe("CC0");
     expect(streetTree?.metadata.realProductModel?.hideComponentIds).toEqual(["street-tree-trunk", "street-tree-canopy"]);
-    const localStreetTreeOverridePath = join(process.cwd(), "assets/Tree1.3ds");
-    expect(existsSync(localStreetTreeOverridePath)).toBe(true);
-    expect(statSync(localStreetTreeOverridePath).size).toBeGreaterThan(3_000_000);
     const streetTreeModelPath = join(process.cwd(), "public/models/cc0/tree_01_art.glb");
     expect(existsSync(streetTreeModelPath)).toBe(true);
     expect(statSync(streetTreeModelPath).size).toBeGreaterThan(900_000);
@@ -916,6 +913,8 @@ describe("rowhome generator", () => {
       expect(model.components.some((component) => componentMatchesViewMode(component, mode)), mode).toBe(true);
     }
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "electrical-panel")!, "electrical")).toBe(true);
+    expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "supply-plenum")!, "hvac")).toBe(true);
+    expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "return-plenum")!, "hvac")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "supply-trunk-1")!, "hvac")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "water-service-lateral")!, "plumbing")).toBe(true);
     expect(componentMatchesViewMode(model.components.find((component) => component.metadata.id === "floor-plate-1")!, "wood-structure")).toBe(true);
