@@ -15,5 +15,7 @@ export const defaultRowhomeConfig: RowhomeConfig = {
   facadeStyleId: "flat-front",
   stairImplementation: "alternating-run",
   structuralSupportScheme: "masonry-bearing",
-  brickDetailMode: "solid-textured"
+  brickDetailMode: "solid-textured",
+  constructionSystem: "masonry-wood",
+  urbanScale: "single"
 };

@@ -15,6 +15,8 @@ export type ValidationSeverity = "warning" | "error";
 export type StairImplementation = "alternating-run" | "spiral";
 export type StructuralSupportScheme = "masonry-bearing" | "steel-post-beam";
 export type BrickDetailMode = "solid-textured" | "individual-bricks";
+export type ConstructionSystem = "masonry-wood" | "steel-concrete";
+export type UrbanScale = "single" | "block-32" | "district-128";
 
 export interface ValidationMessage {
   severity: ValidationSeverity;
@@ -256,6 +258,8 @@ export interface RowhomeConfig {
   stairImplementation: StairImplementation;
   structuralSupportScheme: StructuralSupportScheme;
   brickDetailMode: BrickDetailMode;
+  constructionSystem: ConstructionSystem;
+  urbanScale: UrbanScale;
 }
 
 export interface BomLine {

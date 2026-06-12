@@ -63,10 +63,12 @@ if (!app) {
 app.innerHTML = `
   <main class="layout">
     <section class="viewport">
-      <div class="toolbar">
-        <button id="export-model-stl" type="button">Export STL</button>
-        <button id="export-json" type="button">Export JSON</button>
-        <label class="toolbar-field" for="view-preset-select">
+      <div class="toolbar" role="toolbar" aria-label="Model viewer controls">
+        <div class="toolbar-group" role="group" aria-label="Export">
+          <button id="export-model-stl" type="button" title="Download the whole printable model as an STL file">Export STL</button>
+          <button id="export-json" type="button" title="Download model metadata, BOM, and validation as JSON">Export JSON</button>
+        </div>
+        <label class="toolbar-field" for="view-preset-select" title="Jump to a fixed inspection view">
           <span>View</span>
           <select id="view-preset-select">
             <option value="model">3D model</option>
@@ -80,16 +82,22 @@ app.innerHTML = `
             <option value="review-sheet">Four-view sheet</option>
           </select>
         </label>
-        <span id="render-mode">Renderer</span>
-        <label class="toolbar-field toolbar-field-compact" for="walkthrough-route-select">
-          <span>Walk</span>
-          <select id="walkthrough-route-select"></select>
-        </label>
-        <button id="walkthrough-toggle" type="button">Watch Person</button>
-        <button id="walkthrough-follow" type="button">Follow</button>
-        <span id="selection">No selection</span>
+        <span id="render-mode" role="button" tabindex="0" title="Click to toggle between WebGL2 and WebGPU rendering">Renderer</span>
+        <div class="toolbar-group" role="group" aria-label="Occupant walkthrough">
+          <label class="toolbar-field toolbar-field-compact" for="walkthrough-route-select" title="Choose the occupant walkthrough route">
+            <span>Walk</span>
+            <select id="walkthrough-route-select"></select>
+          </label>
+          <button id="walkthrough-toggle" type="button" title="Watch a person walk the selected route through the house">Watch Person</button>
+          <button id="walkthrough-follow" type="button" title="Keep the camera following the walking person">Follow</button>
+        </div>
+        <span id="selection" role="status" aria-live="polite" title="Click any part of the model to isolate it; press Escape to clear">No selection</span>
       </div>
-      <canvas id="scene"></canvas>
+      <canvas id="scene" tabindex="0" aria-label="3D rowhome model. Drag to look, W A S D to fly, Q and E for up and down, click parts to isolate."></canvas>
+      <div class="status-toast" id="rebuild-status" role="status" aria-live="polite" hidden>
+        <span class="status-spinner" aria-hidden="true"></span>
+        Updating model…
+      </div>
       <div class="review-sheet-overlay" id="review-sheet-overlay" hidden aria-hidden="true">
         <section class="review-sheet-cell review-sheet-cell-top">
           <strong>Roof Plan</strong>
@@ -117,7 +125,7 @@ app.innerHTML = `
         </div>
         <small>Normalized conceptual load intensity only; not solved stress, capacity, or deflection.</small>
       </aside>
-      <div class="flight-hud" aria-label="Fly camera keys">
+      <div class="flight-hud" aria-label="Fly camera keys" title="Fly the camera: W/A/S/D to move, Q/E for up and down, drag the scene to look around">
         <div class="key-grid">
           <span></span>
           <kbd data-key-hud="keyw">W</kbd>
@@ -233,7 +241,9 @@ function loadStoredAppOptions(): StoredAppOptions {
         stories: finiteNumber(storedConfig.stories, defaultRowhomeConfig.stories),
         storyHeightFt: finiteNumber(storedConfig.storyHeightFt, defaultRowhomeConfig.storyHeightFt),
         basementDepthFt: finiteNumber(storedConfig.basementDepthFt, defaultRowhomeConfig.basementDepthFt),
-        brickDetailMode: storedConfig.brickDetailMode === "individual-bricks" ? "individual-bricks" : "solid-textured"
+        brickDetailMode: storedConfig.brickDetailMode === "individual-bricks" ? "individual-bricks" : "solid-textured",
+        constructionSystem: storedConfig.constructionSystem === "steel-concrete" ? "steel-concrete" : "masonry-wood",
+        urbanScale: storedConfig.urbanScale === "block-32" || storedConfig.urbanScale === "district-128" ? storedConfig.urbanScale : "single"
       },
       viewOptions: {
         ...defaultViewOptions,
@@ -260,6 +270,17 @@ function saveStoredAppOptions(config: RowhomeConfig, options: ViewOptions): void
 }
 
 let { config: currentConfig, viewOptions } = loadStoredAppOptions();
+
+// Show loading overlay before the synchronous Three.js scene construction so the
+// browser can paint the UI shell and remain responsive during geometry building.
+const loadingOverlay = document.createElement("div");
+loadingOverlay.id = "r8-loading-overlay";
+loadingOverlay.textContent = "Building model…";
+app.appendChild(loadingOverlay);
+
+// Yield two animation frames so the browser renders the overlay before the heavy work.
+await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
 let model: RowhomeModel = generateRowhome(currentConfig);
 let activePanelTab: PanelTab = "options";
 renderPanels(model, panel, currentConfig, activePanelTab, viewOptions);
@@ -626,7 +647,35 @@ function updateWalkthroughControls(progress = 0): void {
   walkthroughHud.textContent = `${route.label}: ${Math.round(progress * 100)}%`;
 }
 
+const rebuildStatus = requireElement<HTMLElement>("#rebuild-status");
+let pendingRebuildConfig: RowhomeConfig | null = null;
+
+/**
+ * Rebuilds are queued behind two animation frames so the browser can paint the
+ * "Updating model…" status before the synchronous regeneration runs. Rapid
+ * successive changes coalesce into one rebuild of the latest config.
+ */
 function rebuildModel(nextConfig: RowhomeConfig): void {
+  const alreadyQueued = pendingRebuildConfig !== null;
+  pendingRebuildConfig = { ...nextConfig };
+  if (alreadyQueued) {
+    return;
+  }
+  rebuildStatus.hidden = false;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const config = pendingRebuildConfig ?? nextConfig;
+      pendingRebuildConfig = null;
+      try {
+        performRebuild(config);
+      } finally {
+        rebuildStatus.hidden = true;
+      }
+    });
+  });
+}
+
+function performRebuild(nextConfig: RowhomeConfig): void {
   currentConfig = { ...nextConfig };
   saveStoredAppOptions(currentConfig, viewOptions);
   scene.remove(group);
@@ -699,6 +748,8 @@ async function boot(): Promise<void> {
     currentRenderer = result.renderer;
     currentMode = result.mode;
   }
+
+  loadingOverlay.remove();
   currentRenderer.setPixelRatio(devicePixelRatio);
   if (currentRenderer.shadowMap) {
     currentRenderer.shadowMap.enabled = true;
@@ -737,6 +788,14 @@ async function boot(): Promise<void> {
   }
 
   renderMode.addEventListener("click", async () => {
+    const nextMode: RendererMode = currentMode === "WebGPU" ? "WebGL2" : "WebGPU";
+    await setRendererMode(nextMode);
+  });
+  renderMode.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+    event.preventDefault();
     const nextMode: RendererMode = currentMode === "WebGPU" ? "WebGL2" : "WebGPU";
     await setRendererMode(nextMode);
   });
@@ -1268,6 +1327,13 @@ async function boot(): Promise<void> {
     if (target.id === "structural-support-select") {
       rebuildModel({ ...currentConfig, structuralSupportScheme: target.value as StructuralSupportScheme });
     }
+    if (target.id === "construction-system-select") {
+      rebuildModel({ ...currentConfig, constructionSystem: target.value === "steel-concrete" ? "steel-concrete" : "masonry-wood" });
+    }
+    if (target.id === "urban-scale-select") {
+      const urbanScale = target.value === "block-32" || target.value === "district-128" ? target.value : "single";
+      rebuildModel({ ...currentConfig, urbanScale });
+    }
     if (target.id === "brick-detail-mode-select") {
       rebuildModel({ ...currentConfig, brickDetailMode: target.value as BrickDetailMode });
     }
@@ -1304,10 +1370,22 @@ async function boot(): Promise<void> {
   });
 
   panel.addEventListener("keydown", (event) => {
+    const target = event.target as HTMLElement;
+    // Arrow-key navigation between panel tabs per the WAI-ARIA tabs pattern.
+    if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && target.closest("[data-panel-tab]")) {
+      const tabs = [...panel.querySelectorAll<HTMLButtonElement>("[data-panel-tab]")];
+      const currentIndex = tabs.findIndex((tab) => tab === target.closest("[data-panel-tab]"));
+      if (currentIndex >= 0) {
+        event.preventDefault();
+        const nextIndex = (currentIndex + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+        tabs[nextIndex].focus();
+        setPanelTab(tabs[nextIndex].dataset.panelTab as PanelTab);
+      }
+      return;
+    }
     if (event.key !== "Enter" && event.key !== " ") {
       return;
     }
-    const target = event.target as HTMLElement;
     if (target.closest("[data-download-stl]")) {
       return;
     }
@@ -1370,6 +1448,20 @@ async function boot(): Promise<void> {
   if (window.location.hash === "#steel-support" || window.location.hash === "#steel-structural-demand") {
     rebuildModel({ ...currentConfig, structuralSupportScheme: "steel-post-beam" });
     setPanelTab(window.location.hash === "#steel-structural-demand" ? "structure" : "options");
+  }
+
+  if (window.location.hash === "#steel-concrete") {
+    rebuildModel({ ...currentConfig, constructionSystem: "steel-concrete" });
+    setPanelTab("options");
+  }
+
+  if (window.location.hash === "#city-block" || window.location.hash === "#district") {
+    rebuildModel({ ...currentConfig, urbanScale: window.location.hash === "#district" ? "district-128" : "block-32" });
+    setPanelTab("options");
+  }
+
+  if (window.location.hash === "#investor") {
+    setPanelTab("invest");
   }
 
   if (window.location.hash === "#structural-demand" || window.location.hash === "#steel-structural-demand") {

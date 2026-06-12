@@ -14,13 +14,11 @@ import type {
   StructuralSupport
 } from "../core/types";
 import { steelSupportGrid } from "../generators/steelSupport";
+import { selectedConstructionSystem } from "../core/constructionSystems";
 
-const floorDeadLoadPsf = 15;
 const floorLiveLoadPsf = 40;
-const roofDeadLoadPsf = 18;
 const roofLiveLoadPsf = 20;
 const roofGardenSaturatedDeadLoadPsf = 35;
-const masonryWallDensityPcf = 120;
 const facadeSurfaceDeadLoadPsf = 45;
 const steelSupportAllowanceKips = 18;
 
@@ -259,7 +257,7 @@ function buildDesignChecks(config: RowhomeConfig, members: StructuralMember[]): 
     }
   ];
 
-  if (config.structuralSupportScheme === "steel-post-beam") {
+  if (steelMemberIds.length > 0) {
     checks.push(
       {
         id: "steel-column-buckling",
@@ -308,7 +306,14 @@ function buildDesignChecks(config: RowhomeConfig, members: StructuralMember[]): 
 }
 
 export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
-  const usesSteelSupport = config.structuralSupportScheme === "steel-post-beam";
+  const constructionSystem = selectedConstructionSystem(config);
+  const usesSteelSupport = config.structuralSupportScheme === "steel-post-beam" || constructionSystem.includesSteelFrame;
+  const floorDeadLoadPsf = constructionSystem.structural.floorDeadLoadPsf;
+  const roofDeadLoadPsf = constructionSystem.structural.roofDeadLoadPsf;
+  const wallDensityPcf = constructionSystem.structural.wallDensityPcf;
+  const wallMaterialId = constructionSystem.structural.wallMaterialId;
+  const floorMaterialId = constructionSystem.structural.floorMaterialId;
+  const framingMaterialId = constructionSystem.structural.framingMaterialId;
   const rowhomeCount = Math.max(1, Math.round(config.rowhomeCount || 1));
   const totalBuildingWidthFt = config.buildingWidthFt * rowhomeCount;
   const buildingHeight = config.stories * config.storyHeightFt;
@@ -321,7 +326,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
   const totalFloorAreaSqFt = round(floorPlateAreaSqFt * floorCount);
   const partyWallVolumeCf = (rowhomeCount + 1) * 0.45 * config.buildingDepthFt * buildingHeight;
   const rearWallVolumeCf = 0.36 * totalBuildingWidthFt * buildingHeight;
-  const wallDeadLoadKips = round(((partyWallVolumeCf + rearWallVolumeCf) * masonryWallDensityPcf + totalBuildingWidthFt * buildingHeight * facadeSurfaceDeadLoadPsf) / 1000);
+  const wallDeadLoadKips = round(((partyWallVolumeCf + rearWallVolumeCf) * wallDensityPcf + totalBuildingWidthFt * buildingHeight * facadeSurfaceDeadLoadPsf) / 1000);
   const steelSupportDeadLoadKips = usesSteelSupport ? steelSupportAllowanceKips : 0;
 
   const nodes: StructuralNode[] = [];
@@ -368,7 +373,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       kind: "foundation-line",
       startNodeId: `${key}-foundation`,
       endNodeId: `${key}-level-0`,
-      materialId: "masonry",
+      materialId: wallMaterialId === "masonry" ? "masonry" : "reinforced-concrete",
       sectionId: "foundation-wall-line",
       componentIds: ["basement-party-wall-left", "basement-party-wall-right", "basement-front-foundation-wall", "basement-rear-foundation-wall"]
     });
@@ -379,7 +384,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
         kind: "wall-line",
         startNodeId: `${key}-level-${story}`,
         endNodeId: `${key}-level-${story + 1}`,
-        materialId: "masonry",
+        materialId: wallMaterialId,
         sectionId: "masonry-wall-line",
         componentIds: ["party-wall-left", "party-wall-right", "rear-wall", "front-facade"]
       });
@@ -392,7 +397,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       kind: story === config.stories ? "roof-diaphragm" : "floor-diaphragm",
       startNodeId: `floor-${story}-centerline-left`,
       endNodeId: `floor-${story}-centerline-right`,
-      materialId: "wood-framing",
+      materialId: floorMaterialId,
       sectionId: "schematic-floor-diaphragm",
       componentIds: story === config.stories ? [`floor-plate-${story}`] : [`floor-plate-${story}`]
     });
@@ -414,7 +419,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       kind: "stair-shaft-post",
       startNodeId: `stair-shaft-${corner}-level-0`,
       endNodeId: `stair-shaft-${corner}-level-${config.stories}`,
-      materialId: "wood-framing",
+      materialId: framingMaterialId,
       sectionId: "schematic-built-up-post",
       componentIds: [`stair-shaft-continuous-load-post-${corner}`, `stair-shaft-post-cap-plate-${corner}`]
     });
@@ -433,7 +438,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
         kind: "stair-opening-header",
         startNodeId: `stair-shaft-${start}-level-${level}`,
         endNodeId: `stair-shaft-${end}-level-${level}`,
-        materialId: "wood-framing",
+        materialId: framingMaterialId,
         sectionId: "schematic-opening-header",
         componentIds: [componentId]
       });
@@ -450,7 +455,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
         kind: "diaphragm-collector",
         startNodeId: `stair-shaft-${start}-level-${level}`,
         endNodeId: `stair-shaft-${end}-level-${level}`,
-        materialId: "wood-framing",
+        materialId: framingMaterialId,
         sectionId: "schematic-diaphragm-collector",
         componentIds: [componentId]
       });
@@ -519,7 +524,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
     {
       id: "masonry",
       name: "Conceptual masonry wall material",
-      densityPcf: masonryWallDensityPcf,
+      densityPcf: 120,
       elasticModulusKsi: 1800,
       source: sources.residentialCode
     },
@@ -528,6 +533,13 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
       name: "Conceptual wood floor and roof framing",
       densityPcf: 35,
       elasticModulusKsi: 1400,
+      source: sources.residentialCode
+    },
+    {
+      id: "concrete-metal-deck",
+      name: "Conceptual concrete slab on steel metal deck",
+      densityPcf: 145,
+      elasticModulusKsi: 3600,
       source: sources.residentialCode
     },
     {
@@ -803,6 +815,7 @@ export function buildStructuralModel(config: RowhomeConfig): StructuralModel {
     areaLoads,
     assumptions: [
       "This is a conceptual gravity-load model, not a solved structural analysis model.",
+      `Construction system is ${constructionSystem.label}: ${constructionSystem.notes}`,
       `Floor dead load is ${floorDeadLoadPsf} psf and floor live load is ${floorLiveLoadPsf} psf.`,
       `Roof dead load is ${roofDeadLoadPsf} psf and roof live or snow allowance is ${roofLiveLoadPsf} psf.`,
       `Raised roof garden saturated dead-load allowance is ${roofGardenSaturatedDeadLoadPsf} psf over ${roofGardenAreaSqFt} sf.`,

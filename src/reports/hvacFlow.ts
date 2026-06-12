@@ -36,6 +36,12 @@ export interface HvacFlowReport {
     heatingTerminalId: string;
     heatingBtuh: number;
   }>;
+  nodeBalances: Array<{
+    node: string;
+    inflowCfm: number;
+    outflowCfm: number;
+    imbalanceCfm: number;
+  }>;
   checks: {
     allSegmentsHavePositiveArea: boolean;
     allSegmentsHavePositiveFlow: boolean;
@@ -50,6 +56,9 @@ export interface HvacFlowReport {
     centralCoolingBalancedByFloor: boolean;
     hasFloorIndependentHeating: boolean;
     heatingEveryFloor: boolean;
+    supplyNetworkFullyConnected: boolean;
+    returnNetworkFullyConnected: boolean;
+    nodalFlowConservation: boolean;
   };
   edges: HvacFlowEdge[];
 }
@@ -76,6 +85,55 @@ export function hvacFlowEdges(): HvacFlowEdge[] {
         boundaryCondition: hvac.boundaryCondition
       };
     });
+}
+
+function reachableNodes(edges: HvacFlowEdge[], rootNode: string): Set<string> {
+  const adjacency = new Map<string, string[]>();
+  for (const edge of edges) {
+    const targets = adjacency.get(edge.from) ?? [];
+    targets.push(edge.to);
+    adjacency.set(edge.from, targets);
+  }
+  const visited = new Set<string>([rootNode]);
+  const queue = [rootNode];
+  while (queue.length > 0) {
+    const node = queue.shift() as string;
+    for (const next of adjacency.get(node) ?? []) {
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return visited;
+}
+
+export interface HvacNodeBalance {
+  node: string;
+  inflowCfm: number;
+  outflowCfm: number;
+  imbalanceCfm: number;
+}
+
+export function hvacNodeBalances(edges: HvacFlowEdge[]): HvacNodeBalance[] {
+  const inflow = new Map<string, number>();
+  const outflow = new Map<string, number>();
+  for (const edge of edges) {
+    outflow.set(edge.from, (outflow.get(edge.from) ?? 0) + edge.flowCfm);
+    inflow.set(edge.to, (inflow.get(edge.to) ?? 0) + edge.flowCfm);
+  }
+  const nodes = new Set([...inflow.keys(), ...outflow.keys()]);
+  const balances: HvacNodeBalance[] = [];
+  for (const node of nodes) {
+    const inCfm = inflow.get(node) ?? 0;
+    const outCfm = outflow.get(node) ?? 0;
+    // Boundary nodes (sources and sinks) only flow one way and are excluded from conservation.
+    if (inCfm === 0 || outCfm === 0) {
+      continue;
+    }
+    balances.push({ node, inflowCfm: inCfm, outflowCfm: outCfm, imbalanceCfm: Math.round((inCfm - outCfm) * 100) / 100 });
+  }
+  return balances;
 }
 
 export function buildHvacFlowReport(generatedAt = new Date().toISOString()): HvacFlowReport {
@@ -108,6 +166,16 @@ export function buildHvacFlowReport(generatedAt = new Date().toISOString()): Hva
     };
   });
 
+  const supplyReachable = reachableNodes(supplyEdges, "supply-plenum");
+  const supplyRegisterNodes = [...nodeIds].filter((node) => node.startsWith("supply-register-"));
+  const supplyNetworkFullyConnected = supplyRegisterNodes.length > 0 && supplyRegisterNodes.every((node) => supplyReachable.has(node));
+  const returnGrilleNodes = [...nodeIds].filter((node) => node.startsWith("return-grille-zone-"));
+  const returnNetworkFullyConnected =
+    returnGrilleNodes.length > 0 &&
+    returnGrilleNodes.every((node) => reachableNodes(returnEdges, node).has("return-plenum"));
+  const balances = hvacNodeBalances([...supplyEdges, ...returnEdges]);
+  const nodalFlowConservation = balances.length > 0 && balances.every((balance) => Math.abs(balance.imbalanceCfm) <= 2);
+
   return {
     generatedAt,
     purpose: "Headless CI duct-airflow preflight report. The website renderer does not run this test or FEM workflow.",
@@ -120,6 +188,7 @@ export function buildHvacFlowReport(generatedAt = new Date().toISOString()): Hva
       exhaustCfm: exhaustEdges.reduce((sum, edge) => sum + edge.flowCfm, 0)
     },
     floorAirBalance,
+    nodeBalances: balances,
     checks: {
       allSegmentsHavePositiveArea: edges.every((edge) => edge.hydraulicAreaSqFt > 0),
       allSegmentsHavePositiveFlow: edges.every((edge) => edge.flowCfm > 0),
@@ -133,7 +202,10 @@ export function buildHvacFlowReport(generatedAt = new Date().toISOString()): Hva
       hasPerFloorReturnPaths: [1, 2, 3].every((level) => returnEdges.some((edge) => edge.from === `return-grille-zone-${level}`)),
       centralCoolingBalancedByFloor: floorAirBalance.every((floor) => Math.abs(floor.deltaCfm) <= 1),
       hasFloorIndependentHeating: heatingTerminals.length > 0,
-      heatingEveryFloor: [1, 2, 3].every((level) => heatingTerminals.some((terminal) => terminal.level === level && terminal.heatingBtuh > 0))
+      heatingEveryFloor: [1, 2, 3].every((level) => heatingTerminals.some((terminal) => terminal.level === level && terminal.heatingBtuh > 0)),
+      supplyNetworkFullyConnected,
+      returnNetworkFullyConnected,
+      nodalFlowConservation
     },
     edges
   };

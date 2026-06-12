@@ -74,7 +74,16 @@ function scaledSizeMm(component: ModelComponent, scaleDenominator: number): Vect
   return size.multiplyScalar(304.8 / scaleDenominator);
 }
 
-function printKitFor(component: ModelComponent): string {
+export const printKitLabels: Record<string, string> = {
+  "site-base": "Site and display base",
+  "shell-envelope": "Shell, facade, roof, and envelope",
+  "structure-egress": "Structure, stairs, guards, and egress",
+  "mep-overlays": "MEP overlay parts",
+  "interiors-fixtures": "Interior fixtures and furnishings",
+  miscellaneous: "Miscellaneous small parts"
+};
+
+export function printKitFor(component: ModelComponent): string {
   const id = component.metadata.id;
   const category = component.metadata.category;
   if (/sidewalk|road|yard|tree|landscape|stoop|grade|site/i.test(`${id} ${category}`)) {
@@ -133,14 +142,7 @@ function checkComponent(component: ModelComponent, profile: PrintProfile): Print
 }
 
 function buildKits(checks: PrintComponentCheck[]): PrintKit[] {
-  const labels: Record<string, string> = {
-    "site-base": "Site and display base",
-    "shell-envelope": "Shell, facade, roof, and envelope",
-    "structure-egress": "Structure, stairs, guards, and egress",
-    "mep-overlays": "MEP overlay parts",
-    "interiors-fixtures": "Interior fixtures and furnishings",
-    miscellaneous: "Miscellaneous small parts"
-  };
+  const labels = printKitLabels;
   const byKit = new Map<string, PrintComponentCheck[]>();
   for (const check of checks.filter((item) => item.printableFlag)) {
     byKit.set(check.kit, [...(byKit.get(check.kit) ?? []), check]);
