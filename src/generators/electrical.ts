@@ -5,6 +5,46 @@ import { attachRealAsset } from "./realAssets";
 
 type LightingPoint = readonly [id: string, name: string, floor: number, x: number, y: number];
 
+export interface PanelScheduleEntry {
+  circuitId: string;
+  description: string;
+  breakerAmps: number;
+  poles: 1 | 2;
+  voltage: 120 | 240;
+  conductorAwg: number;
+  servedComponentIds: string[];
+  source: string;
+}
+
+/**
+ * Machine-readable panel schedule for the modeled 200 A all-electric service.
+ * Breaker and conductor pairings follow the schematic NEC-informed assumptions
+ * used by the generated branch-circuit components; final load calculation and
+ * breaker selection require licensed electrical design.
+ */
+export const panelSchedule: PanelScheduleEntry[] = [
+  { circuitId: "breaker-main", description: "200 A main breaker", breakerAmps: 200, poles: 2, voltage: 240, conductorAwg: 0, servedComponentIds: ["electrical-panel"], source: sources.electricalCode },
+  { circuitId: "breaker-lighting-1", description: "Lighting circuit floors 1-2", breakerAmps: 20, poles: 1, voltage: 120, conductorAwg: 12, servedComponentIds: ["lighting-branch-circuit-1", "lighting-branch-circuit-2"], source: sources.electricalCode },
+  { circuitId: "breaker-lighting-2", description: "Lighting circuit floor 3", breakerAmps: 20, poles: 1, voltage: 120, conductorAwg: 12, servedComponentIds: ["lighting-branch-circuit-3"], source: sources.electricalCode },
+  { circuitId: "breaker-receptacle-1", description: "Receptacle circuit floors 1-2", breakerAmps: 20, poles: 1, voltage: 120, conductorAwg: 12, servedComponentIds: ["receptacle-branch-circuit-1", "receptacle-branch-circuit-2"], source: sources.electricalCode },
+  { circuitId: "breaker-receptacle-2", description: "Receptacle circuit floor 3", breakerAmps: 20, poles: 1, voltage: 120, conductorAwg: 12, servedComponentIds: ["receptacle-branch-circuit-3"], source: sources.electricalCode },
+  { circuitId: "breaker-kitchen-small-appliance", description: "Kitchen small-appliance circuit", breakerAmps: 20, poles: 1, voltage: 120, conductorAwg: 12, servedComponentIds: [], source: sources.electricalCode },
+  { circuitId: "breaker-range-240v", description: "Electric range circuit", breakerAmps: 50, poles: 2, voltage: 240, conductorAwg: 6, servedComponentIds: ["range-240v-circuit", "kitchen-240v-outlet"], source: sources.electricalCode },
+  { circuitId: "breaker-hvac", description: "Heat pump air handler and condenser", breakerAmps: 30, poles: 2, voltage: 240, conductorAwg: 10, servedComponentIds: ["air-handler-branch-circuit", "central-ac-condenser-branch-circuit"], source: sources.electricalCode },
+  { circuitId: "breaker-water-heater", description: "Heat pump water heater circuit", breakerAmps: 30, poles: 2, voltage: 240, conductorAwg: 10, servedComponentIds: ["water-heater-branch-circuit"], source: sources.electricalCode },
+  { circuitId: "breaker-pv-battery", description: "Roof PV and battery interconnection", breakerAmps: 40, poles: 2, voltage: 240, conductorAwg: 8, servedComponentIds: [], source: sources.electricalCode }
+];
+
+/** NEC-informed copper NM-B conductor ampacity assumptions used by the schematic model. */
+export const conductorAmpacityByAwg: Record<number, number> = {
+  14: 15,
+  12: 20,
+  10: 30,
+  8: 40,
+  6: 55,
+  0: 200
+};
+
 const lightingPoints: LightingPoint[] = [
   ["living-room", "Living room LED ceiling luminaire", 0, 9.0, 9.2],
   ["dining-room", "Dining room LED ceiling luminaire", 0, 9.0, 24.0],

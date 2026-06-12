@@ -1,6 +1,7 @@
 import type { ModelComponent, RowhomeConfig } from "../core/types";
 import { sources } from "../core/sources";
 import { selectedFacadeMaterial } from "../core/facadeMaterials";
+import { selectedConstructionSystem } from "../core/constructionSystems";
 import { box, frontWallOpenings, metadata, rearWallOpenings, wallSegmentsAroundOpenings } from "./builder";
 
 function stairOpening(config: RowhomeConfig): { xMin: number; xMax: number; yMin: number; yMax: number } {
@@ -449,6 +450,7 @@ export function addInteriorPartitionAssembly(
     });
   }
 
+  const partitionSystem = selectedConstructionSystem(config);
   for (const segment of segments) {
     const segmentId = segment.id;
     const segmentX = segment.x;
@@ -462,13 +464,13 @@ export function addInteriorPartitionAssembly(
         segmentId === "left" ? id : `${id}-${segmentId}`,
         `${id.replaceAll("-", " ")} ${segmentId} stud core`,
         "interior",
-        "2x4 wood stud partition framing",
+        partitionSystem.interiorPartitionFraming,
         sources.residentialCode,
         segmentId === "left" ? 1100 : 0,
         true,
         segment.notes
       ),
-      "#c49a67",
+      partitionSystem.id === "steel-concrete" ? "#a4abb1" : "#c49a67",
       segmentWidth,
       3.5 / 12,
       segmentHeight,

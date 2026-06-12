@@ -4,6 +4,8 @@ import { makeCurvedFacadeComponent, makeCylinderComponent } from "../geometry/co
 import { validateRowhome } from "../validation/validate";
 import { estimateFacadeMaterialCost, selectedFacadeMaterial } from "../core/facadeMaterials";
 import { selectedFacadeStyle } from "../core/facadeStyles";
+import { selectedConstructionSystem } from "../core/constructionSystems";
+import { addCityBlockMassing } from "./cityBlock";
 import { box, bowProjectionAtX, bowTangentAngleAtX, frontWallOpenings, metadata, rearWallOpenings, wallSegmentsAroundOpenings } from "./builder";
 import { addAlternatingRunStairEgressBridge, addAlternatingRunStairFlight, addSpiralStairFlight, frontSpiralStairPlan } from "./stairs";
 import { addBasement } from "./basement";
@@ -268,6 +270,7 @@ function partyWallCenterX(boundaryIndex: number, config: RowhomeConfig, count: n
 }
 
 function addSharedPartyWalls(components: ModelComponent[], config: RowhomeConfig, count: number, buildingHeight: number, renderIndividualBricks: boolean): number {
+  const system = selectedConstructionSystem(config);
   let brickCount = 0;
   for (let boundary = 0; boundary <= count; boundary += 1) {
     const isShared = boundary > 0 && boundary < count;
@@ -278,13 +281,14 @@ function addSharedPartyWalls(components: ModelComponent[], config: RowhomeConfig
     const x = partyWallCenterX(boundary, config, count);
     const notes = [
       isShared
-        ? "Single shared masonry party-wall core at the common boundary; adjacent rowhomes do not duplicate side-wall structure."
-        : "End masonry party-wall core for the row assembly."
+        ? "Single shared party-wall core at the common boundary; adjacent rowhomes do not duplicate side-wall structure."
+        : "End party-wall core for the row assembly.",
+      system.notes
     ];
     box(
       components,
-      metadata(id, name, "structure", "shared 8 in brick or CMU masonry party wall", sources.residentialCode, 8800, true, notes),
-      "#9f422f",
+      metadata(id, name, "structure", `shared ${system.partyWall.material}`, system.source, system.partyWall.costUsd, true, notes),
+      system.partyWall.color,
       0.45,
       config.buildingDepthFt,
       buildingHeight,
@@ -301,22 +305,24 @@ function addSharedPartyWalls(components: ModelComponent[], config: RowhomeConfig
         { x, y: config.buildingDepthFt / 2, z: -config.basementDepthFt / 2 }
       );
     }
-    const brickWall = {
-      id: `${id}-standard-bricks`,
-      name: `${name} standard brick wythes`,
-      category: "structure",
-      color: "#9f422f",
-      lengthFt: config.buildingDepthFt,
-      heightFt: buildingHeight,
-      center: { x, y: config.buildingDepthFt / 2, z: buildingHeight / 2 },
-      orientation: "party",
-      wytheCount: 2,
-      source: sources.residentialCode,
-      notes
-    } as const;
-    brickCount += brickCountForWall(brickWall);
-    if (renderIndividualBricks) {
-      addInstancedBrickWall(components, brickWall);
+    if (system.usesBrickTakeoff) {
+      const brickWall = {
+        id: `${id}-standard-bricks`,
+        name: `${name} standard brick wythes`,
+        category: "structure",
+        color: "#9f422f",
+        lengthFt: config.buildingDepthFt,
+        heightFt: buildingHeight,
+        center: { x, y: config.buildingDepthFt / 2, z: buildingHeight / 2 },
+        orientation: "party",
+        wytheCount: 2,
+        source: sources.residentialCode,
+        notes
+      } as const;
+      brickCount += brickCountForWall(brickWall);
+      if (renderIndividualBricks) {
+        addInstancedBrickWall(components, brickWall);
+      }
     }
   }
   return brickCount;
@@ -338,11 +344,13 @@ function buildRowAssembly(config: RowhomeConfig, count: number): RowhomeModel {
     const unitModel = generateSingleRowhome(singleUnitConfig);
     if (unit === 0) {
       const singleSummary = singleUnitBrickSummary(unitModel);
-      const singlePartyBoundaryCount = brickCountForWall({
-        lengthFt: config.buildingDepthFt,
-        heightFt: buildingHeight,
-        wytheCount: 2
-      });
+      const singlePartyBoundaryCount = selectedConstructionSystem(config).usesBrickTakeoff
+        ? brickCountForWall({
+            lengthFt: config.buildingDepthFt,
+            heightFt: buildingHeight,
+            wytheCount: 2
+          })
+        : 0;
       unitFrontRearBrickCount = Math.max(0, singleSummary - singlePartyBoundaryCount * 2);
     }
     const xOffset = unit * config.buildingWidthFt;
@@ -394,16 +402,19 @@ function addFloorPlateWithStairOpening(
           yMax: 35.2
         })
   };
+  const system = selectedConstructionSystem(config);
   const z = floor * config.storyHeightFt + 0.16;
   const baseId = `floor-plate-${floor}`;
-  const material = "engineered wood framing with stairwell rough opening";
-  const color = isRoof ? "#746b5a" : "#b89563";
-  const cost = isRoof ? 7800 : 9200;
+  const plateElement = isRoof ? system.roof : system.floor;
+  const material = `${plateElement.material} with stairwell rough opening`;
+  const color = plateElement.color;
+  const cost = plateElement.costUsd;
   const notes = [
     "Floor plate is segmented around the stairwell shaft so stairs pass through the floor instead of intersecting a solid slab.",
     config.stairImplementation === "spiral"
       ? "Opening is centered on the front bowed-facade spiral stair shaft."
-      : "Opening includes the basement stair and alternating run stair footprint."
+      : "Opening includes the basement stair and alternating run stair footprint.",
+    system.notes
   ];
 
   for (const [segmentId, x0, x1, y0, y1] of [
@@ -1361,10 +1372,11 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   addStreetFrontage(components, config.buildingWidthFt);
   addBasement(components, config);
 
+  const constructionSystem = selectedConstructionSystem(config);
   box(
     components,
-    metadata("party-wall-left", "Left party wall", "structure", "8 in brick or CMU masonry party wall", sources.residentialCode, 8800),
-    "#9f422f",
+    metadata("party-wall-left", "Left party wall", "structure", constructionSystem.partyWall.material, constructionSystem.source, constructionSystem.partyWall.costUsd),
+    constructionSystem.partyWall.color,
     0.45,
     d,
     buildingHeight,
@@ -1372,46 +1384,48 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   );
   box(
     components,
-    metadata("party-wall-right", "Right party wall", "structure", "8 in brick or CMU masonry party wall", sources.residentialCode, 8800),
-    "#9f422f",
+    metadata("party-wall-right", "Right party wall", "structure", constructionSystem.partyWall.material, constructionSystem.source, constructionSystem.partyWall.costUsd),
+    constructionSystem.partyWall.color,
     0.45,
     d,
     buildingHeight,
     { x: w - 0.225, y: d / 2, z: buildingHeight / 2 }
   );
-  const leftPartyBrickWall = {
-    id: "party-wall-left-standard-bricks",
-    name: "Left party wall standard brick wythe",
-    category: "structure",
-    color: "#9f422f",
-    lengthFt: d,
-    heightFt: buildingHeight,
-    center: { x: 0.45 + standardBrick.actualDepthFt / 2, y: d / 2, z: buildingHeight / 2 },
-    orientation: "party",
-    wytheCount: 2,
-    source: sources.residentialCode,
-    notes: ["Two wythes are counted for the schematic masonry party wall; the structural wall mass remains as a backing volume for collision and layer filtering."]
-  } as const;
-  calculatedBrickCount += brickCountForWall(leftPartyBrickWall);
-  if (renderIndividualBricks) {
-    addInstancedBrickWall(components, leftPartyBrickWall);
-  }
-  const rightPartyBrickWall = {
-    id: "party-wall-right-standard-bricks",
-    name: "Right party wall standard brick wythe",
-    category: "structure",
-    color: "#9f422f",
-    lengthFt: d,
-    heightFt: buildingHeight,
-    center: { x: w - 0.45 - standardBrick.actualDepthFt / 2, y: d / 2, z: buildingHeight / 2 },
-    orientation: "party",
-    wytheCount: 2,
-    source: sources.residentialCode,
-    notes: ["Two wythes are counted for the schematic masonry party wall; the structural wall mass remains as a backing volume for collision and layer filtering."]
-  } as const;
-  calculatedBrickCount += brickCountForWall(rightPartyBrickWall);
-  if (renderIndividualBricks) {
-    addInstancedBrickWall(components, rightPartyBrickWall);
+  if (constructionSystem.usesBrickTakeoff) {
+    const leftPartyBrickWall = {
+      id: "party-wall-left-standard-bricks",
+      name: "Left party wall standard brick wythe",
+      category: "structure",
+      color: "#9f422f",
+      lengthFt: d,
+      heightFt: buildingHeight,
+      center: { x: 0.45 + standardBrick.actualDepthFt / 2, y: d / 2, z: buildingHeight / 2 },
+      orientation: "party",
+      wytheCount: 2,
+      source: sources.residentialCode,
+      notes: ["Two wythes are counted for the schematic masonry party wall; the structural wall mass remains as a backing volume for collision and layer filtering."]
+    } as const;
+    calculatedBrickCount += brickCountForWall(leftPartyBrickWall);
+    if (renderIndividualBricks) {
+      addInstancedBrickWall(components, leftPartyBrickWall);
+    }
+    const rightPartyBrickWall = {
+      id: "party-wall-right-standard-bricks",
+      name: "Right party wall standard brick wythe",
+      category: "structure",
+      color: "#9f422f",
+      lengthFt: d,
+      heightFt: buildingHeight,
+      center: { x: w - 0.45 - standardBrick.actualDepthFt / 2, y: d / 2, z: buildingHeight / 2 },
+      orientation: "party",
+      wytheCount: 2,
+      source: sources.residentialCode,
+      notes: ["Two wythes are counted for the schematic masonry party wall; the structural wall mass remains as a backing volume for collision and layer filtering."]
+    } as const;
+    calculatedBrickCount += brickCountForWall(rightPartyBrickWall);
+    if (renderIndividualBricks) {
+      addInstancedBrickWall(components, rightPartyBrickWall);
+    }
   }
   const facadeMeta = metadata(
       "front-facade",
@@ -1494,35 +1508,37 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
         index === 0 ? "rear-wall" : `rear-wall-segment-${index + 1}`,
         index === 0 ? "Rear wall" : `Rear wall segment ${index + 1}`,
         "structure",
-        "8 in brick or CMU masonry rear wall segmented around rear exits",
-        sources.residentialCode,
-        index === 0 ? 9600 : 0,
+        `${constructionSystem.rearWall.material} segmented around rear exits`,
+        constructionSystem.source,
+        index === 0 ? constructionSystem.rearWall.costUsd : 0,
         true,
         ["Rear wall is segmented around egress door rough openings so the rear exits are passable."]
       ),
-      "#7e382d",
+      constructionSystem.rearWall.color,
       segment.width,
       0.36,
       segment.height,
       { x: segment.xCenter, y: d + 0.18, z: segment.zCenter }
     );
   }
-  for (const [index, segment] of rearWallSegments.entries()) {
-    const rearBrickWall = {
-      id: index === 0 ? "rear-wall-standard-bricks" : `rear-wall-standard-bricks-${index + 1}`,
-      name: index === 0 ? "Rear wall standard brick wythe" : `Rear wall standard brick wythe segment ${index + 1}`,
-      category: "structure",
-      color: "#7e382d",
-      lengthFt: segment.width,
-      heightFt: segment.height,
-      center: { x: segment.xCenter, y: d + 0.36 + standardBrick.actualDepthFt / 2, z: segment.zCenter },
-      orientation: "front-rear",
-      source: sources.residentialCode,
-      notes: ["Segmented around rear egress door rough openings."]
-    } as const;
-    calculatedBrickCount += brickCountForWall(rearBrickWall);
-    if (renderIndividualBricks) {
-      addInstancedBrickWall(components, rearBrickWall);
+  if (constructionSystem.usesBrickTakeoff) {
+    for (const [index, segment] of rearWallSegments.entries()) {
+      const rearBrickWall = {
+        id: index === 0 ? "rear-wall-standard-bricks" : `rear-wall-standard-bricks-${index + 1}`,
+        name: index === 0 ? "Rear wall standard brick wythe" : `Rear wall standard brick wythe segment ${index + 1}`,
+        category: "structure",
+        color: "#7e382d",
+        lengthFt: segment.width,
+        heightFt: segment.height,
+        center: { x: segment.xCenter, y: d + 0.36 + standardBrick.actualDepthFt / 2, z: segment.zCenter },
+        orientation: "front-rear",
+        source: sources.residentialCode,
+        notes: ["Segmented around rear egress door rough openings."]
+      } as const;
+      calculatedBrickCount += brickCountForWall(rearBrickWall);
+      if (renderIndividualBricks) {
+        addInstancedBrickWall(components, rearBrickWall);
+      }
     }
   }
   addBrickCountSummary(components, calculatedBrickCount);
@@ -1535,7 +1551,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
   addArchitecturalLogicDetails(components, config, buildingHeight);
   addRoofRunoffManagementDetails(components, config, buildingHeight);
   addFireAndThermalAssemblies(components, config, buildingHeight);
-  if (config.structuralSupportScheme === "steel-post-beam") {
+  if (config.structuralSupportScheme === "steel-post-beam" || constructionSystem.includesSteelFrame) {
     addSteelSupportSystem(components, config, buildingHeight);
   }
   addRoofSolarArray(components, config, buildingHeight);
@@ -2056,8 +2072,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
 
 export function generateRowhome(config: RowhomeConfig): RowhomeModel {
   const count = rowhomeCount(config);
-  if (count === 1) {
-    return generateSingleRowhome({ ...config, rowhomeCount: 1 });
-  }
-  return buildRowAssembly(config, count);
+  const model = count === 1 ? generateSingleRowhome({ ...config, rowhomeCount: 1 }) : buildRowAssembly(config, count);
+  addCityBlockMassing(model.components, config);
+  return model;
 }

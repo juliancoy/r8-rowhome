@@ -29,4 +29,28 @@ describe("HVAC duct-airflow report", () => {
     expect(report.totals.returnTerminalCfm).toBe(1200);
     expect(report.edges.every((edge) => edge.network === "central-cooling-airflow")).toBe(true);
   });
+
+  it("verifies duct network connectivity from plenum to every terminal", () => {
+    const report = buildHvacFlowReport("test-generated-at");
+
+    expect(report.checks.supplyNetworkFullyConnected).toBe(true);
+    expect(report.checks.returnNetworkFullyConnected).toBe(true);
+  });
+
+  it("conserves airflow at every internal duct junction", () => {
+    const report = buildHvacFlowReport("test-generated-at");
+
+    expect(report.nodeBalances.length).toBeGreaterThan(5);
+    for (const balance of report.nodeBalances) {
+      expect(Math.abs(balance.imbalanceCfm), `node ${balance.node} imbalance`).toBeLessThanOrEqual(2);
+    }
+    expect(report.checks.nodalFlowConservation).toBe(true);
+  });
+
+  it("models distinct riser and trunk paths without duplicate parallel edges", () => {
+    const report = buildHvacFlowReport("test-generated-at");
+
+    const edgePairs = report.edges.filter((edge) => edge.role !== "exhaust").map((edge) => `${edge.from}->${edge.to}`);
+    expect(new Set(edgePairs).size).toBe(edgePairs.length);
+  });
 });

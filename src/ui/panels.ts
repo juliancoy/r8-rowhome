@@ -3,10 +3,12 @@ import { buildBom, totalEstimatedCost } from "../export/bom";
 import type { RowhomeConfig, ViewOptions } from "../core/types";
 import { estimateFacadeMaterialCost, facadeMaterialOptions } from "../core/facadeMaterials";
 import { facadeStyleOptions, selectedFacadeStyle } from "../core/facadeStyles";
+import { constructionSystemOptions, selectedConstructionSystem } from "../core/constructionSystems";
+import { buildInvestorDashboard, type InvestorDashboardReport } from "../reports/investorDashboard";
 import { sourceDocuments, type SourceDocumentEntry } from "../generated/documentIndex";
 import { viewLayerOptions } from "../viewer/layers";
 
-export type PanelTab = "options" | "view" | "bom" | "components" | "systems" | "structure" | "documents" | "validation";
+export type PanelTab = "options" | "view" | "bom" | "components" | "systems" | "structure" | "invest" | "documents" | "validation";
 
 const stairImplementationOptions = [
   {
@@ -140,6 +142,137 @@ function renderDocumentTree(node: DocumentTreeNode): string {
   `;
 }
 
+const pieColors = ["#5b9bd5", "#ed7d31", "#70ad47", "#ffc000", "#9e6cc3", "#4bbfbf", "#d65a5a", "#8a8f3c", "#c47ba0", "#6f7d8c", "#b08d57", "#4f6d44"];
+
+// The dashboard generates its own normalized per-home model, which is expensive;
+// cache it per config so panel re-renders (light sliders, tab switches) reuse it.
+let cachedDashboard: { key: string; report: InvestorDashboardReport } | null = null;
+
+function investorDashboardForConfig(config: RowhomeConfig): InvestorDashboardReport {
+  const key = JSON.stringify({ ...config, rowhomeCount: 1, urbanScale: "single" });
+  if (cachedDashboard?.key !== key) {
+    cachedDashboard = { key, report: buildInvestorDashboard(config) };
+  }
+  return cachedDashboard.report;
+}
+
+function compactUsd(value: number): string {
+  if (value >= 1e12) return `$${(value / 1e12).toFixed(value >= 1e13 ? 0 : 1)}T`;
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `$${Math.round(value / 1e3)}k`;
+  return `$${Math.round(value)}`;
+}
+
+function pieSlicePath(cx: number, cy: number, r: number, startFraction: number, endFraction: number): string {
+  const startAngle = startFraction * 2 * Math.PI - Math.PI / 2;
+  const endAngle = endFraction * 2 * Math.PI - Math.PI / 2;
+  const x1 = cx + r * Math.cos(startAngle);
+  const y1 = cy + r * Math.sin(startAngle);
+  const x2 = cx + r * Math.cos(endAngle);
+  const y2 = cy + r * Math.sin(endAngle);
+  const largeArc = endFraction - startFraction > 0.5 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+}
+
+function pieChartSvg(title: string, slices: Array<{ label: string; value: number }>): string {
+  const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0);
+  if (total <= 0) {
+    return "";
+  }
+  let cursor = 0;
+  const paths = slices.map((slice, index) => {
+    const fraction = Math.max(0, slice.value) / total;
+    const path = fraction >= 0.999
+      ? `<circle cx="70" cy="70" r="62" fill="${pieColors[index % pieColors.length]}" />`
+      : `<path d="${pieSlicePath(70, 70, 62, cursor, cursor + fraction)}" fill="${pieColors[index % pieColors.length]}" />`;
+    cursor += fraction;
+    return path;
+  });
+  const legend = slices.map((slice, index) => `
+    <div class="invest-legend-row">
+      <span class="invest-swatch" style="background:${pieColors[index % pieColors.length]}"></span>
+      <span>${slice.label}</span>
+      <strong>${compactUsd(slice.value)} (${Math.round((slice.value / total) * 100)}%)</strong>
+    </div>
+  `).join("");
+  return `
+    <div class="invest-chart">
+      <h3>${title}</h3>
+      <div class="invest-chart-body">
+        <svg viewBox="0 0 140 140" class="invest-pie" role="img" aria-label="${title}">${paths.join("")}</svg>
+        <div class="invest-legend">${legend}</div>
+      </div>
+    </div>
+  `;
+}
+
+function marketCirclesSvg(report: InvestorDashboardReport): string {
+  const radii = report.marketCircles.map((circle) => 6 * Math.log10(Math.max(10, circle.valueUsd)) - 4);
+  const maxRadius = Math.max(...radii);
+  let x = 0;
+  const centers = radii.map((radius) => {
+    const cx = x + radius;
+    x += radius * 2 + 26;
+    return cx;
+  });
+  const width = x - 26;
+  const height = maxRadius * 2 + 56;
+  const circleColors = ["#3f6ea6", "#5b9bd5", "#ffc000"];
+  const figures = report.marketCircles.map((circle, index) => `
+    <circle cx="${centers[index].toFixed(1)}" cy="${maxRadius.toFixed(1)}" r="${radii[index].toFixed(1)}" fill="${circleColors[index]}" fill-opacity="0.85" />
+    <text x="${centers[index].toFixed(1)}" y="${(maxRadius * 2 + 18).toFixed(1)}" text-anchor="middle" class="invest-circle-value">${compactUsd(circle.valueUsd)}</text>
+    <text x="${centers[index].toFixed(1)}" y="${(maxRadius * 2 + 34).toFixed(1)}" text-anchor="middle" class="invest-circle-label">${index === 0 ? "World real estate" : index === 1 ? "US residential" : "This block (32 homes)"}</text>
+  `).join("");
+  return `
+    <div class="invest-chart">
+      <h3>Market: world → US → this block</h3>
+      <svg viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" class="invest-circles" role="img" aria-label="Market size circles">${figures}</svg>
+      <small>Circle radii are log-scaled; values are public estimates plus the model-derived block assessment. Verify before investor use.</small>
+    </div>
+  `;
+}
+
+function renderInvestPanel(report: InvestorDashboardReport): string {
+  const perHome = report.perHome;
+  const profitSlices = [
+    { label: "Materials", value: perHome.materialCostUsd },
+    { label: "Labor", value: perHome.laborCostUsd },
+    { label: "Soft costs", value: perHome.softCostUsd },
+    { label: "Land", value: perHome.landCostUsd },
+    { label: "Contingency", value: perHome.contingencyUsd },
+    { label: "Projected profit", value: Math.max(0, perHome.projectedProfitUsd) }
+  ];
+  return `
+    <div id="investor-dashboard">
+      <div class="data-row">
+        <strong>${report.constructionSystem.label}</strong>
+        <span>Per home: ${compactUsd(perHome.totalDevelopmentCostUsd)} development cost vs ${compactUsd(perHome.salePriceAssumptionUsd)} sale assumption (${perHome.salePricePerSf}/sf x ${perHome.finishedFloorAreaSf} sf) = ${compactUsd(perHome.projectedProfitUsd)} projected profit (${perHome.projectedMarginPct}% margin).</span>
+      </div>
+      ${marketCirclesSvg(report)}
+      ${pieChartSvg("Where the money you can make goes (per home)", profitSlices)}
+      ${pieChartSvg("Labor by crew (per home)", report.laborByRole.map((slice) => ({ label: slice.title, value: slice.laborCostUsd })))}
+      ${pieChartSvg("Material cost by category (per home)", report.costByCategory.map((slice) => ({ label: slice.category, value: slice.costUsd })))}
+      <div class="data-row">
+        <strong>Block parcel (32 homes)</strong>
+        <span>${compactUsd(report.block.parcelValueUsd)} assessed; ${compactUsd(report.block.projectedProfitUsd)} projected profit over ${compactUsd(report.block.developmentCostUsd)} development cost.</span>
+      </div>
+      <div class="data-row">
+        <strong>District parcel (128 homes)</strong>
+        <span>${compactUsd(report.district.parcelValueUsd)} assessed; ${compactUsd(report.district.projectedProfitUsd)} projected profit. Select the urban scale in Options to see the block instanced in 3D.</span>
+      </div>
+      <div class="data-row">
+        <strong>Green block program</strong>
+        <span>Solar on every roof; ${report.greenProgram.roofGardens} ${report.greenProgram.composters} ${report.greenProgram.blockchainParcelRegistry}</span>
+      </div>
+      <div class="data-row warning">
+        <strong>Disclaimer</strong>
+        <span>${report.disclaimer}</span>
+      </div>
+    </div>
+  `;
+}
+
 export function renderPanels(model: RowhomeModel, root: HTMLElement, config: RowhomeConfig, activeTab: PanelTab, viewOptions: ViewOptions): void {
   const bom = buildBom(model);
   const selectedStyle = selectedFacadeStyle(config.facadeStyleId);
@@ -157,17 +290,18 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
 
     <section class="panel-tabs" aria-label="Model panels">
       <div class="tab-list" role="tablist">
-        <button class="tab-button ${activeClass("options", activeTab)}" data-panel-tab="options" type="button" role="tab" aria-selected="${activeTab === "options"}">Options</button>
-        <button class="tab-button ${activeClass("view", activeTab)}" data-panel-tab="view" type="button" role="tab" aria-selected="${activeTab === "view"}">View</button>
-        <button class="tab-button ${activeClass("bom", activeTab)}" data-panel-tab="bom" type="button" role="tab" aria-selected="${activeTab === "bom"}">Bill</button>
-        <button class="tab-button ${activeClass("components", activeTab)}" data-panel-tab="components" type="button" role="tab" aria-selected="${activeTab === "components"}">Parts</button>
-        <button class="tab-button ${activeClass("systems", activeTab)}" data-panel-tab="systems" type="button" role="tab" aria-selected="${activeTab === "systems"}">Systems</button>
-        <button class="tab-button ${activeClass("structure", activeTab)}" data-panel-tab="structure" type="button" role="tab" aria-selected="${activeTab === "structure"}">Loads</button>
-        <button class="tab-button ${activeClass("documents", activeTab)}" data-panel-tab="documents" type="button" role="tab" aria-selected="${activeTab === "documents"}">Docs</button>
-        <button class="tab-button ${activeClass("validation", activeTab)}" data-panel-tab="validation" type="button" role="tab" aria-selected="${activeTab === "validation"}">Checks</button>
+        <button class="tab-button ${activeClass("options", activeTab)}" data-panel-tab="options" id="tab-options" aria-controls="tabpanel-options" type="button" role="tab" aria-selected="${activeTab === "options"}">Options</button>
+        <button class="tab-button ${activeClass("view", activeTab)}" data-panel-tab="view" id="tab-view" aria-controls="tabpanel-view" type="button" role="tab" aria-selected="${activeTab === "view"}">View</button>
+        <button class="tab-button ${activeClass("bom", activeTab)}" data-panel-tab="bom" id="tab-bom" aria-controls="tabpanel-bom" type="button" role="tab" aria-selected="${activeTab === "bom"}">Bill</button>
+        <button class="tab-button ${activeClass("components", activeTab)}" data-panel-tab="components" id="tab-components" aria-controls="tabpanel-components" type="button" role="tab" aria-selected="${activeTab === "components"}">Parts</button>
+        <button class="tab-button ${activeClass("systems", activeTab)}" data-panel-tab="systems" id="tab-systems" aria-controls="tabpanel-systems" type="button" role="tab" aria-selected="${activeTab === "systems"}">Systems</button>
+        <button class="tab-button ${activeClass("structure", activeTab)}" data-panel-tab="structure" id="tab-structure" aria-controls="tabpanel-structure" type="button" role="tab" aria-selected="${activeTab === "structure"}">Loads</button>
+        <button class="tab-button ${activeClass("invest", activeTab)}" data-panel-tab="invest" id="tab-invest" aria-controls="tabpanel-invest" type="button" role="tab" aria-selected="${activeTab === "invest"}">Invest</button>
+        <button class="tab-button ${activeClass("documents", activeTab)}" data-panel-tab="documents" id="tab-documents" aria-controls="tabpanel-documents" type="button" role="tab" aria-selected="${activeTab === "documents"}">Docs</button>
+        <button class="tab-button ${activeClass("validation", activeTab)}" data-panel-tab="validation" id="tab-validation" aria-controls="tabpanel-validation" type="button" role="tab" aria-selected="${activeTab === "validation"}">Checks</button>
       </div>
 
-      <section class="tab-panel ${activeClass("options", activeTab)}" data-tab-panel="options" role="tabpanel">
+      <section class="tab-panel ${activeClass("options", activeTab)}" data-tab-panel="options" id="tabpanel-options" aria-labelledby="tab-options" role="tabpanel">
         <h2>Implementation Options</h2>
         <label class="field">
           <span>Homes in row</span>
@@ -175,6 +309,24 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
             ${rowhomeCountOptions.map((count) => `
               <option value="${count}" ${count === config.rowhomeCount ? "selected" : ""}>
                 ${count}
+              </option>
+            `).join("")}
+          </select>
+        </label>
+        <label class="field">
+          <span>Urban scale</span>
+          <select id="urban-scale-select">
+            <option value="single" ${config.urbanScale === "single" ? "selected" : ""}>Single rowhome / row</option>
+            <option value="block-32" ${config.urbanScale === "block-32" ? "selected" : ""}>City block (32 homes)</option>
+            <option value="district-128" ${config.urbanScale === "district-128" ? "selected" : ""}>District (4 blocks, 128 homes)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Construction system</span>
+          <select id="construction-system-select">
+            ${constructionSystemOptions.map((option) => `
+              <option value="${option.id}" ${option.id === config.constructionSystem ? "selected" : ""}>
+                ${option.label}
               </option>
             `).join("")}
           </select>
@@ -234,6 +386,10 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
           <span>${config.rowhomeCount === 1 ? "Single dwelling with left and right party-wall cores." : `${config.rowhomeCount + 1} party-wall cores total; adjacent rowhomes share one wall at each common boundary instead of duplicating side walls.`}</span>
         </div>
         <div class="data-row">
+          <strong>${selectedConstructionSystem(config).label}</strong>
+          <span>${selectedConstructionSystem(config).notes}</span>
+        </div>
+        <div class="data-row">
           <strong>${stairImplementationOptions.find((option) => option.id === config.stairImplementation)?.label ?? "Alternating run"}</strong>
           <span>${stairImplementationOptions.find((option) => option.id === config.stairImplementation)?.notes ?? stairImplementationOptions[0].notes}</span>
         </div>
@@ -259,7 +415,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         </div>
       </section>
 
-      <section class="tab-panel ${activeClass("view", activeTab)}" data-tab-panel="view" role="tabpanel">
+      <section class="tab-panel ${activeClass("view", activeTab)}" data-tab-panel="view" id="tabpanel-view" aria-labelledby="tab-view" role="tabpanel">
         <h2>View Options</h2>
         <label class="field">
           <span>Drag rotate left/right</span>
@@ -309,7 +465,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         </div>
       </section>
 
-      <section class="tab-panel ${activeClass("bom", activeTab)}" data-tab-panel="bom" role="tabpanel">
+      <section class="tab-panel ${activeClass("bom", activeTab)}" data-tab-panel="bom" id="tabpanel-bom" aria-labelledby="tab-bom" role="tabpanel">
         <h2>Bill of Materials</h2>
         ${brickTakeoff.total > 0 ? `
           <div class="data-row">
@@ -326,7 +482,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         `).join("")}
       </section>
 
-      <section class="tab-panel ${activeClass("components", activeTab)}" data-tab-panel="components" role="tabpanel">
+      <section class="tab-panel ${activeClass("components", activeTab)}" data-tab-panel="components" id="tabpanel-components" aria-labelledby="tab-components" role="tabpanel">
         <h2>Parts</h2>
         <button class="show-all-row" data-show-all-components type="button">Show full model</button>
         ${model.components.map((component) => `
@@ -342,7 +498,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         `).join("")}
       </section>
 
-      <section class="tab-panel ${activeClass("systems", activeTab)}" data-tab-panel="systems" role="tabpanel">
+      <section class="tab-panel ${activeClass("systems", activeTab)}" data-tab-panel="systems" id="tabpanel-systems" aria-labelledby="tab-systems" role="tabpanel">
         <h2>Layer Views</h2>
         <div class="layer-grid">
           ${viewLayerOptions.map((layer) => `
@@ -358,7 +514,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         </div>
       </section>
 
-      <section class="tab-panel ${activeClass("structure", activeTab)}" data-tab-panel="structure" role="tabpanel">
+      <section class="tab-panel ${activeClass("structure", activeTab)}" data-tab-panel="structure" id="tabpanel-structure" aria-labelledby="tab-structure" role="tabpanel">
         <h2>Structural Gravity Model</h2>
         ${model.structural ? `
           <div class="data-row warning">
@@ -427,7 +583,12 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         `}
       </section>
 
-      <section class="tab-panel ${activeClass("documents", activeTab)}" data-tab-panel="documents" role="tabpanel">
+      <section class="tab-panel ${activeClass("invest", activeTab)}" data-tab-panel="invest" id="tabpanel-invest" aria-labelledby="tab-invest" role="tabpanel">
+        <h2>Investor Dashboard</h2>
+        ${renderInvestPanel(investorDashboardForConfig(config))}
+      </section>
+
+      <section class="tab-panel ${activeClass("documents", activeTab)}" data-tab-panel="documents" id="tabpanel-documents" aria-labelledby="tab-documents" role="tabpanel">
         <h2>Documents</h2>
         <div class="data-row">
           <strong>Source Library</strong>
@@ -438,7 +599,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         </ul>
       </section>
 
-      <section class="tab-panel ${activeClass("validation", activeTab)}" data-tab-panel="validation" role="tabpanel">
+      <section class="tab-panel ${activeClass("validation", activeTab)}" data-tab-panel="validation" id="tabpanel-validation" aria-labelledby="tab-validation" role="tabpanel">
         <h2>Validation</h2>
         ${model.validation.map((message) => `
           <div class="data-row ${message.severity}">

@@ -133,4 +133,83 @@ describe("conceptual structural gravity model", () => {
     expect(structuralDemandColor(0.5).getHexString()).toBe("f2d45a");
     expect(structuralDemandColor(1).getHexString()).toBe("d7191c");
   });
+
+  describe("steel + concrete construction system", () => {
+    const steelConcreteConfig = { ...defaultRowhomeConfig, constructionSystem: "steel-concrete" as const };
+
+    it("switches structural members to concrete walls and composite deck floors", () => {
+      const structural = buildStructuralModel(steelConcreteConfig);
+
+      expect(structural.members.filter((member) => member.kind === "wall-line").every((member) => member.materialId === "reinforced-concrete")).toBe(true);
+      expect(
+        structural.members
+          .filter((member) => member.kind === "floor-diaphragm" || member.kind === "roof-diaphragm")
+          .every((member) => member.materialId === "concrete-metal-deck")
+      ).toBe(true);
+      expect(structural.members.filter((member) => member.kind === "stair-opening-header").every((member) => member.materialId === "structural-steel")).toBe(true);
+      expect(structural.materials.some((material) => material.id === "concrete-metal-deck" && material.densityPcf === 145)).toBe(true);
+    });
+
+    it("always includes the steel frame, its supports, and steel design checks", () => {
+      const structural = buildStructuralModel(steelConcreteConfig);
+
+      expect(structural.members.some((member) => member.kind === "steel-column")).toBe(true);
+      expect(structural.members.some((member) => member.kind === "steel-beam")).toBe(true);
+      expect(structural.supports.length).toBe(12);
+      expect(structural.gravityReport.steelSupportDeadLoadKips).toBeGreaterThan(0);
+      expect(structural.designChecks.some((check) => check.id === "steel-column-buckling")).toBe(true);
+      expect(structural.designChecks.some((check) => check.id === "steel-fire-protection")).toBe(true);
+    });
+
+    it("carries heavier concrete dead loads than the masonry-wood baseline", () => {
+      const masonryWood = buildStructuralModel(defaultRowhomeConfig);
+      const steelConcrete = buildStructuralModel(steelConcreteConfig);
+
+      expect(steelConcrete.gravityReport.floorDeadLoadKips).toBeGreaterThan(masonryWood.gravityReport.floorDeadLoadKips * 2);
+      expect(steelConcrete.gravityReport.roofDeadLoadKips).toBeGreaterThan(masonryWood.gravityReport.roofDeadLoadKips);
+      expect(steelConcrete.gravityReport.wallDeadLoadKips).toBeGreaterThan(masonryWood.gravityReport.wallDeadLoadKips);
+      expect(steelConcrete.gravityReport.totalGravityLoadKips).toBeGreaterThan(masonryWood.gravityReport.totalGravityLoadKips);
+      expect(steelConcrete.assumptions.some((assumption) => assumption.includes("Steel frame + concrete"))).toBe(true);
+    });
+
+    it("generates concrete walls, composite slabs, steel frame, and no brick takeoff", () => {
+      const model = generateRowhome(steelConcreteConfig);
+
+      const partyWall = model.components.find((component) => component.metadata.id === "party-wall-left");
+      expect(partyWall?.metadata.material).toContain("reinforced concrete party wall");
+      const rearWall = model.components.find((component) => component.metadata.id === "rear-wall");
+      expect(rearWall?.metadata.material).toContain("reinforced concrete rear wall");
+      const floorPlate = model.components.find((component) => component.metadata.id === "floor-plate-1");
+      expect(floorPlate?.metadata.material).toContain("concrete slab on steel metal deck");
+      const roofPlate = model.components.find((component) => component.metadata.id === `floor-plate-${steelConcreteConfig.stories}`);
+      expect(roofPlate?.metadata.material).toContain("concrete roof slab on steel metal deck");
+      expect(model.components.some((component) => component.metadata.id.startsWith("steel-column-"))).toBe(true);
+      expect(model.components.some((component) => component.metadata.id === "party-wall-left-standard-bricks")).toBe(false);
+      expect(model.components.some((component) => component.metadata.id === "rear-wall-standard-bricks")).toBe(false);
+      const partition = model.components.find((component) => component.metadata.material.includes("steel stud partition"));
+      expect(partition).toBeDefined();
+      expect(model.validation.filter((message) => message.severity === "error")).toHaveLength(0);
+    });
+
+    it("keeps the brick takeoff and wood framing in the masonry-wood baseline", () => {
+      const masonryModel = generateRowhome(defaultRowhomeConfig);
+      const steelConcreteModel = generateRowhome(steelConcreteConfig);
+
+      const masonryBricks = masonryModel.components.find((component) => component.metadata.id === "brick-takeoff-summary")?.metadata.quantity?.count ?? 0;
+      const steelConcreteBricks = steelConcreteModel.components.find((component) => component.metadata.id === "brick-takeoff-summary")?.metadata.quantity?.count ?? 0;
+      expect(masonryBricks).toBeGreaterThan(0);
+      expect(steelConcreteBricks).toBeLessThan(masonryBricks);
+      const floorPlate = masonryModel.components.find((component) => component.metadata.id === "floor-plate-1");
+      expect(floorPlate?.metadata.material).toContain("engineered wood framing");
+    });
+
+    it("supports steel-concrete row assemblies with shared concrete party walls", () => {
+      const model = generateRowhome({ ...steelConcreteConfig, rowhomeCount: 3 });
+
+      const sharedWall = model.components.find((component) => component.metadata.id === "shared-party-wall-1");
+      expect(sharedWall?.metadata.material).toContain("reinforced concrete party wall");
+      expect(model.components.some((component) => component.metadata.id.endsWith("-standard-bricks") && component.metadata.id.includes("party-wall"))).toBe(false);
+      expect(model.validation.filter((message) => message.severity === "error")).toHaveLength(0);
+    });
+  });
 });

@@ -1,0 +1,730 @@
+{
+  "generatedAt": "2026-06-12T02:46:38.903Z",
+  "purpose": "Filled permit application worksheets for the Baltimore City DHCD ePermits new-construction path, mirroring the portal screens so values can be transcribed directly.",
+  "scopeBoundary": "Baltimore City accepts these applications only through the ePermits portal; no standalone fillable PDFs exist for this path. Every value the model can supply is filled in; fields marked for the owner or a licensed professional are genuinely theirs to complete and none of this is a submitted application or approval.",
+  "constructionSystem": {
+    "id": "masonry-wood",
+    "label": "Brick masonry + wood framing"
+  },
+  "forms": [
+    {
+      "id": "form-01-combo-permit-application",
+      "title": "One and Two Family Combo Permit Application — New Construction",
+      "basis": "sources/dhcd-epermits-one-two-family-combo-new-construction-guide.pdf",
+      "submittedVia": "Baltimore City DHCD ePermits portal (online application; no paper form exists for this step)",
+      "notes": [
+        "Field order mirrors the ePermits application screens so values can be transcribed directly.",
+        "Owner identity and parcel fields auto-populate in the portal from the address search; verify the record owner."
+      ],
+      "sections": [
+        {
+          "title": "Work Site Information",
+          "fields": [
+            {
+              "label": "Street #",
+              "value": "[OWNER TO PROVIDE]",
+              "source": "owner"
+            },
+            {
+              "label": "Street name",
+              "value": "[OWNER TO PROVIDE] — candidate corridor: East 25th Street, Baltimore, MD 21218",
+              "source": "owner"
+            },
+            {
+              "label": "Parcel and legal owner of record",
+              "value": "[AUTO-FILLED BY EPERMITS FROM PARCEL RECORD — VERIFY]",
+              "source": "portal-auto"
+            }
+          ]
+        },
+        {
+          "title": "Project Information",
+          "fields": [
+            {
+              "label": "Project name",
+              "value": "R-8 Rowhome New Construction (source-traced concept model)",
+              "source": "model"
+            },
+            {
+              "label": "Detailed description of work",
+              "value": "New construction of one three-story single-family attached rowhouse with basement on an R-8 lot: brick masonry + wood framing structure, all-electric service (no gas), heat pump HVAC, heat pump water heater, rooftop solar PV with battery storage, residential fire sprinkler per IRC P2904, rear egress and fire escape, roof garden allowance, and street tree.",
+              "source": "model"
+            },
+            {
+              "label": "Type of work",
+              "value": "New Construction",
+              "source": "model"
+            },
+            {
+              "label": "Building type",
+              "value": "One-family dwelling — attached rowhouse",
+              "source": "model"
+            },
+            {
+              "label": "Other permits pending for this property",
+              "value": "No (verify) — [OWNER TO PROVIDE]",
+              "source": "owner"
+            }
+          ]
+        },
+        {
+          "title": "Project Details and Acknowledgements",
+          "fields": [
+            {
+              "label": "Lead paint notification acknowledgement",
+              "value": "[OWNER TO PROVIDE] (new construction; acknowledge in portal)",
+              "source": "owner"
+            },
+            {
+              "label": "Affordable housing question",
+              "value": "[OWNER TO PROVIDE]",
+              "source": "owner"
+            },
+            {
+              "label": "Reasonable accommodations question",
+              "value": "[OWNER TO PROVIDE]",
+              "source": "owner"
+            }
+          ]
+        },
+        {
+          "title": "Residential Detail",
+          "fields": [
+            {
+              "label": "Dwelling units",
+              "value": "1",
+              "source": "model"
+            },
+            {
+              "label": "Stories above grade",
+              "value": "3",
+              "source": "model"
+            },
+            {
+              "label": "Basement",
+              "value": "Yes — 8 ft depth",
+              "source": "model"
+            },
+            {
+              "label": "Finished floor area",
+              "value": "2592 sq ft",
+              "source": "model"
+            },
+            {
+              "label": "Basement area",
+              "value": "864 sq ft",
+              "source": "model"
+            },
+            {
+              "label": "Building footprint",
+              "value": "18 ft x 48 ft",
+              "source": "model"
+            },
+            {
+              "label": "Building height",
+              "value": "30 ft",
+              "source": "model"
+            },
+            {
+              "label": "Construction type",
+              "value": "V-B (combustible wood framing with masonry party walls) — confirm with architect of record",
+              "source": "model"
+            },
+            {
+              "label": "Heating fuel",
+              "value": "Electric (all-electric dwelling; no gas service or gas appliances)",
+              "source": "model"
+            },
+            {
+              "label": "Water service",
+              "value": "Public (verify) — [OWNER TO PROVIDE]",
+              "source": "owner"
+            },
+            {
+              "label": "Sanitary sewer",
+              "value": "Public (verify) — [OWNER TO PROVIDE]",
+              "source": "owner"
+            }
+          ]
+        },
+        {
+          "title": "Zoning Information",
+          "fields": [
+            {
+              "label": "Zoning district",
+              "value": "R-8 Rowhouse and Multi-Family Residential (sources/code-article-32-section-9-204-r8-rowhouse-residential.html) — [AUTO-FILLED BY EPERMITS FROM PARCEL RECORD — VERIFY]",
+              "source": "portal-auto"
+            },
+            {
+              "label": "Proposed use",
+              "value": "Single-family attached rowhouse dwelling",
+              "source": "model"
+            },
+            {
+              "label": "Historic district / overlay questions",
+              "value": "[OWNER TO PROVIDE] (verify CHAP and overlay status for the parcel)",
+              "source": "owner"
+            }
+          ]
+        },
+        {
+          "title": "Fire Protection",
+          "fields": [
+            {
+              "label": "Residential fire sprinkler required",
+              "value": "Yes — Maryland requires sprinklers in all new dwellings (IRC P2904 basis)",
+              "source": "model"
+            },
+            {
+              "label": "Sprinkler system type and design",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] (State Fire Marshal licensed fire protection contractor; not yet modeled)",
+              "source": "licensed-professional"
+            }
+          ]
+        },
+        {
+          "title": "Estimated Cost of Construction",
+          "fields": [
+            {
+              "label": "Estimated cost (hard cost basis)",
+              "value": "$989,066 (rough-order model estimate: materials $592,473 + labor $396,593; permit fees are valuation-based — confirm final figure with contractor)",
+              "source": "model"
+            }
+          ]
+        },
+        {
+          "title": "Licensed Professionals on the Permit",
+          "fields": [
+            {
+              "label": "General contractor (Maryland Home Builder Registration)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Master electrician (Maryland license + Baltimore City registration)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Master plumber (Maryland license + Baltimore City registration)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Master HVACR (Maryland license + Baltimore City registration)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Fire protection contractor (State Fire Marshal license)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-02-electrical-detail",
+      "title": "Electrical Detail Worksheet",
+      "basis": "sources/dhcd-document-requirements-by-trade-2026-04.pdf",
+      "submittedVia": "Baltimore City DHCD ePermits portal (online application; no paper form exists for this step)",
+      "notes": [
+        "Connected load and circuit schedule come from the model's verified-connectivity electrical system.",
+        "The NEC load calculation of record must be produced by the master electrician; model values are preliminary."
+      ],
+      "sections": [
+        {
+          "title": "Service",
+          "fields": [
+            {
+              "label": "Service voltage",
+              "value": "240 V single phase",
+              "source": "model"
+            },
+            {
+              "label": "Service size",
+              "value": "200 A main-breaker load center (all-electric service)",
+              "source": "model"
+            },
+            {
+              "label": "Preliminary connected load",
+              "value": "35,976 VA (preliminary, not for permit)",
+              "source": "model"
+            },
+            {
+              "label": "Recommended service per preliminary calc",
+              "value": "150 A",
+              "source": "model"
+            },
+            {
+              "label": "Dwelling area used in calc",
+              "value": "2592 sq ft",
+              "source": "model"
+            }
+          ]
+        },
+        {
+          "title": "Branch Circuit Schedule (modeled)",
+          "fields": [
+            {
+              "label": "200 A main breaker",
+              "value": "200 A, 2-pole, 240 V, #service AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Lighting circuit floors 1-2",
+              "value": "20 A, 1-pole, 120 V, #12 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Lighting circuit floor 3",
+              "value": "20 A, 1-pole, 120 V, #12 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Receptacle circuit floors 1-2",
+              "value": "20 A, 1-pole, 120 V, #12 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Receptacle circuit floor 3",
+              "value": "20 A, 1-pole, 120 V, #12 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Kitchen small-appliance circuit",
+              "value": "20 A, 1-pole, 120 V, #12 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Electric range circuit",
+              "value": "50 A, 2-pole, 240 V, #6 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Heat pump air handler and condenser",
+              "value": "30 A, 2-pole, 240 V, #10 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Heat pump water heater circuit",
+              "value": "30 A, 2-pole, 240 V, #10 AWG Cu",
+              "source": "model"
+            },
+            {
+              "label": "Roof PV and battery interconnection",
+              "value": "40 A, 2-pole, 240 V, #8 AWG Cu",
+              "source": "model"
+            }
+          ]
+        },
+        {
+          "title": "Special Systems",
+          "fields": [
+            {
+              "label": "Rooftop PV + battery storage",
+              "value": "Yes — hybrid inverter with lithium-ion storage; interconnection on 40 A 2-pole breaker",
+              "source": "model"
+            },
+            {
+              "label": "240 V range circuit",
+              "value": "Yes — 50 A, #6 AWG Cu, accessible kitchen receptacle",
+              "source": "model"
+            }
+          ]
+        },
+        {
+          "title": "Licensed Electrician",
+          "fields": [
+            {
+              "label": "Master electrician name and Maryland license #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Baltimore City registration #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "NEC load calculation of record",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] (Article 220)",
+              "source": "licensed-professional"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-03-plumbing-detail",
+      "title": "Plumbing Detail Worksheet",
+      "basis": "sources/dhcd-document-requirements-by-trade-2026-04.pdf",
+      "submittedVia": "Baltimore City DHCD ePermits portal (online application; no paper form exists for this step)",
+      "notes": [
+        "Fixture counts and fixture units derive from the generated model; sizing design of record requires the master plumber."
+      ],
+      "sections": [
+        {
+          "title": "Fixtures and Loads",
+          "fields": [
+            {
+              "label": "Total plumbing fixtures",
+              "value": "10",
+              "source": "model"
+            },
+            {
+              "label": "Water supply fixture units (WSFU)",
+              "value": "18",
+              "source": "model"
+            },
+            {
+              "label": "Drainage fixture units (DFU)",
+              "value": "20",
+              "source": "model"
+            },
+            {
+              "label": "Hot water fixtures",
+              "value": "7",
+              "source": "model"
+            },
+            {
+              "label": "Water heater",
+              "value": "Electric heat pump water heater (no gas)",
+              "source": "model"
+            },
+            {
+              "label": "DWV material",
+              "value": "PVC DWV with vent and storm leader per model",
+              "source": "model"
+            }
+          ]
+        },
+        {
+          "title": "Service Sizing (design of record)",
+          "fields": [
+            {
+              "label": "Water service size",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Sewer connection and slope",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Backflow prevention",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            }
+          ]
+        },
+        {
+          "title": "Licensed Plumber",
+          "fields": [
+            {
+              "label": "Master plumber name and Maryland license #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Baltimore City registration #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-04-mechanical-detail",
+      "title": "Mechanical (HVAC) Detail Worksheet",
+      "basis": "sources/dhcd-document-requirements-by-trade-2026-04.pdf",
+      "submittedVia": "Baltimore City DHCD ePermits portal (online application; no paper form exists for this step)",
+      "notes": [
+        "Duct topology is connectivity- and conservation-verified in the model; Manual J/S/D of record requires the licensed designer."
+      ],
+      "sections": [
+        {
+          "title": "Equipment and Loads",
+          "fields": [
+            {
+              "label": "Heating/cooling system",
+              "value": "Air-source heat pump with electric air handler (all-electric)",
+              "source": "model"
+            },
+            {
+              "label": "Conditioned area",
+              "value": "2592 sq ft",
+              "source": "model"
+            },
+            {
+              "label": "Preliminary cooling load",
+              "value": "46,656 BTU/h (3.89 tons; preliminary, not Manual J)",
+              "source": "model"
+            },
+            {
+              "label": "Design supply airflow",
+              "value": "1200 CFM supply / 1200 CFM return, balanced per floor",
+              "source": "model"
+            },
+            {
+              "label": "Ventilation/exhaust",
+              "value": "Bathroom exhaust to roof termination; kitchen range hood to rear wall termination",
+              "source": "model"
+            },
+            {
+              "label": "Supplemental heat",
+              "value": "Floor-independent electric heating terminals on every floor",
+              "source": "model"
+            }
+          ]
+        },
+        {
+          "title": "Design of Record",
+          "fields": [
+            {
+              "label": "Manual J / S / D (or local equivalent)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Equipment selection and refrigerant charge",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] (EPA 608 certified technician)",
+              "source": "licensed-professional"
+            }
+          ]
+        },
+        {
+          "title": "Licensed HVACR Contractor",
+          "fields": [
+            {
+              "label": "Master HVACR name and Maryland license #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Baltimore City registration #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-05-fire-sprinkler",
+      "title": "Residential Fire Sprinkler Worksheet",
+      "basis": "sources/code-building-codes-part-x-international-residential-code-full.html",
+      "submittedVia": "Baltimore City DHCD ePermits portal (online application; no paper form exists for this step)",
+      "notes": [
+        "Maryland requires residential sprinklers in all new dwellings; this system is required scope and is not yet modeled in geometry.",
+        "All design fields are the licensed fire protection contractor's responsibility."
+      ],
+      "sections": [
+        {
+          "title": "Requirement",
+          "fields": [
+            {
+              "label": "Sprinkler system required",
+              "value": "Yes — new single-family dwelling in Maryland (IRC P2904 basis)",
+              "source": "model"
+            },
+            {
+              "label": "Water supply source",
+              "value": "[OWNER TO PROVIDE] (public service expected; confirm meter and pressure)",
+              "source": "owner"
+            }
+          ]
+        },
+        {
+          "title": "System Design (design of record)",
+          "fields": [
+            {
+              "label": "System type (P2904 multipurpose or NFPA 13D)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Hydraulic calculation and head layout",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Hydrostatic test",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Fire protection contractor and State Fire Marshal license #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-06-use-and-occupancy",
+      "title": "Use and Occupancy Permit Application",
+      "basis": "sources/dhcd-detailed-use-and-occupancy-permit-instructions-2025-12.pdf",
+      "submittedVia": "Baltimore City DHCD ePermits portal (online application; no paper form exists for this step)",
+      "notes": [
+        "Filed after construction; listed now so the package is complete end to end."
+      ],
+      "sections": [
+        {
+          "title": "Application",
+          "fields": [
+            {
+              "label": "Property address",
+              "value": "[OWNER TO PROVIDE]",
+              "source": "owner"
+            },
+            {
+              "label": "Proposed use",
+              "value": "Single-family dwelling — attached rowhouse",
+              "source": "model"
+            },
+            {
+              "label": "Dwelling units",
+              "value": "1",
+              "source": "model"
+            },
+            {
+              "label": "Zoning district",
+              "value": "R-8 (verify parcel record)",
+              "source": "portal-auto"
+            },
+            {
+              "label": "Prior use",
+              "value": "[OWNER TO PROVIDE] (vacant lot / prior structure)",
+              "source": "owner"
+            },
+            {
+              "label": "Applicant name and contact",
+              "value": "[OWNER TO PROVIDE]",
+              "source": "owner"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-07-eplans-submission-checklist",
+      "title": "ePlans Drawing Submission Checklist",
+      "basis": "sources/dhcd-eplans-submission-matrix-2026-01-26.pdf",
+      "submittedVia": "Baltimore City DHCD ePlans (drawing upload follows the permit application)",
+      "notes": [
+        "Model artifacts are design inputs for the professionals; every sealed document remains their responsibility."
+      ],
+      "sections": [
+        {
+          "title": "Required Drawing Set",
+          "fields": [
+            {
+              "label": "Sealed architectural set (plans, elevations, sections, life safety)",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] — model input: artifacts/construction-documents/",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Sealed structural drawings and calculations",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] — model input: artifacts/structural-gravity/",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Electrical design and panel schedule",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] — model input: artifacts/electrical-circuits/",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Mechanical design",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] — model input: artifacts/hvac-flow/",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Plumbing riser and sizing",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] — model input: artifacts/plumbing-fluid/",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Energy code compliance documentation",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Site / erosion and sediment control documents",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE] (where disturbance thresholds apply)",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "File naming per submission matrix",
+              "value": "[OWNER TO PROVIDE] (follow sources/dhcd-eplans-submission-matrix-2026-01-26.pdf)",
+              "source": "owner"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-08-licensed-professional-registration",
+      "title": "Licensed Professional Registration Worksheet",
+      "basis": "sources/dhcd-epermits-renew-registration-licensed-professionals-2026-03-18.pdf",
+      "submittedVia": "Baltimore City DHCD ePermits portal (online application; no paper form exists for this step)",
+      "notes": [
+        "Every professional must hold a current Baltimore City ePermits registration before they can be added to the permit."
+      ],
+      "sections": [
+        {
+          "title": "Registrations to Verify or Renew",
+          "fields": [
+            {
+              "label": "General contractor — Maryland Home Builder Registration #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Master electrician — license # and city registration",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Master plumber — license # and city registration",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Master HVACR — license # and city registration",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Fire protection contractor — State Fire Marshal license #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Architect of record — Maryland license #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            },
+            {
+              "label": "Structural engineer of record — Maryland PE #",
+              "value": "[LICENSED PROFESSIONAL TO PROVIDE]",
+              "source": "licensed-professional"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "formCount": 8,
+    "fieldCount": 101,
+    "modelFilledCount": 48,
+    "ownerActionCount": 14,
+    "licensedProfessionalCount": 36,
+    "portalAutoCount": 3
+  }
+}
