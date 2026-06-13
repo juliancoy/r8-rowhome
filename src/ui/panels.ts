@@ -8,7 +8,7 @@ import { buildInvestorDashboard, type InvestorDashboardReport } from "../reports
 import { sourceDocuments, type SourceDocumentEntry } from "../generated/documentIndex";
 import { viewLayerOptions } from "../viewer/layers";
 
-export type PanelTab = "options" | "view" | "bom" | "components" | "systems" | "structure" | "invest" | "documents" | "validation";
+export type PanelTab = "options" | "settings" | "bom" | "components" | "systems" | "structure" | "invest" | "documents" | "validation";
 
 const stairImplementationOptions = [
   {
@@ -291,7 +291,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
     <section class="panel-tabs" aria-label="Model panels">
       <div class="tab-list" role="tablist">
         <button class="tab-button ${activeClass("options", activeTab)}" data-panel-tab="options" id="tab-options" aria-controls="tabpanel-options" type="button" role="tab" aria-selected="${activeTab === "options"}">Options</button>
-        <button class="tab-button ${activeClass("view", activeTab)}" data-panel-tab="view" id="tab-view" aria-controls="tabpanel-view" type="button" role="tab" aria-selected="${activeTab === "view"}">View</button>
+        <button class="tab-button ${activeClass("settings", activeTab)}" data-panel-tab="settings" id="tab-settings" aria-controls="tabpanel-settings" type="button" role="tab" aria-selected="${activeTab === "settings"}">Settings</button>
         <button class="tab-button ${activeClass("bom", activeTab)}" data-panel-tab="bom" id="tab-bom" aria-controls="tabpanel-bom" type="button" role="tab" aria-selected="${activeTab === "bom"}">Bill</button>
         <button class="tab-button ${activeClass("components", activeTab)}" data-panel-tab="components" id="tab-components" aria-controls="tabpanel-components" type="button" role="tab" aria-selected="${activeTab === "components"}">Parts</button>
         <button class="tab-button ${activeClass("systems", activeTab)}" data-panel-tab="systems" id="tab-systems" aria-controls="tabpanel-systems" type="button" role="tab" aria-selected="${activeTab === "systems"}">Systems</button>
@@ -415,8 +415,8 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
         </div>
       </section>
 
-      <section class="tab-panel ${activeClass("view", activeTab)}" data-tab-panel="view" id="tabpanel-view" aria-labelledby="tab-view" role="tabpanel">
-        <h2>View Options</h2>
+      <section class="tab-panel ${activeClass("settings", activeTab)}" data-tab-panel="settings" id="tabpanel-settings" aria-labelledby="tab-settings" role="tabpanel">
+        <h2>Settings</h2>
         <label class="field">
           <span>Drag rotate left/right</span>
           <select id="invert-drag-horizontal">
@@ -440,8 +440,37 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
           </select>
         </label>
         <label class="field">
+          <span>Camera wall collisions</span>
+          <select id="camera-wall-collisions">
+            <option value="enabled" ${viewOptions.cameraWallCollisions ? "selected" : ""}>Enabled</option>
+            <option value="disabled" ${viewOptions.cameraWallCollisions ? "" : "selected"}>Disabled</option>
+          </select>
+          <small>Controls whether the Follow camera is blocked by walls during person walkthroughs.</small>
+        </label>
+        <label class="field">
+          <span>HVAC system</span>
+          <select id="show-hvac-system">
+            <option value="enabled" ${viewOptions.showHvacSystem ? "selected" : ""}>Enabled</option>
+            <option value="disabled" ${viewOptions.showHvacSystem ? "" : "selected"}>Disabled</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Electrical system</span>
+          <select id="show-electrical-system">
+            <option value="enabled" ${viewOptions.showElectricalSystem ? "selected" : ""}>Enabled</option>
+            <option value="disabled" ${viewOptions.showElectricalSystem ? "" : "selected"}>Disabled</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Fire escape</span>
+          <select id="show-fire-escape">
+            <option value="enabled" ${viewOptions.showFireEscape ? "selected" : ""}>Enabled</option>
+            <option value="disabled" ${viewOptions.showFireEscape ? "" : "selected"}>Disabled</option>
+          </select>
+        </label>
+        <label class="field">
           <span>Ambient light</span>
-          <input id="ambient-light-intensity" type="range" min="0.2" max="3" step="0.05" value="${viewOptions.ambientLightIntensity}">
+          <input id="ambient-light-intensity" type="range" min="0.2" max="6" step="0.05" value="${viewOptions.ambientLightIntensity}">
           <small>${viewOptions.ambientLightIntensity.toFixed(2)}x sky and ground fill</small>
         </label>
         <label class="field">
@@ -458,7 +487,7 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
           </select>
           <small>Fast keeps counts but hides brick instances and skips GLB products. Full brick detail is for inspection/takeoff views.</small>
         </label>
-        <button class="show-all-row" id="reset-saved-options" type="button">Reset saved options</button>
+        <button class="show-all-row" id="reset-saved-options" type="button">Reset all settings</button>
         <div class="data-row">
           <strong>Camera drag</strong>
           <span>Left-click drag rotates the camera in place. WASD moves relative to the current camera orientation. E and Q move absolute up and down.</span>

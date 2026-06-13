@@ -19,6 +19,7 @@ import {
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { defaultRowhomeConfig } from "./core/config";
 import { generateRowhome } from "./generators/rowhome";
+import { cityBlockLayout } from "./generators/cityBlock";
 import { modelGroup } from "./geometry/component";
 import { exportComponentStl, exportModelStl, downloadTextFile } from "./export/stl";
 import { exportModelMetadataJson } from "./export/json";
@@ -208,8 +209,12 @@ declare global {
 const defaultViewOptions: ViewOptions = {
   invertDragHorizontal: false,
   invertDragVertical: false,
+  cameraWallCollisions: true,
+  showHvacSystem: true,
+  showElectricalSystem: true,
+  showFireEscape: true,
   dragSensitivity: 0.003,
-  ambientLightIntensity: 1.8,
+  ambientLightIntensity: 3.6,
   roomLightIntensity: 2,
   renderDetail: "balanced"
 };
@@ -248,6 +253,18 @@ function loadStoredAppOptions(): StoredAppOptions {
       viewOptions: {
         ...defaultViewOptions,
         ...storedViewOptions,
+        cameraWallCollisions: typeof storedViewOptions.cameraWallCollisions === "boolean"
+          ? storedViewOptions.cameraWallCollisions
+          : defaultViewOptions.cameraWallCollisions,
+        showHvacSystem: typeof storedViewOptions.showHvacSystem === "boolean"
+          ? storedViewOptions.showHvacSystem
+          : defaultViewOptions.showHvacSystem,
+        showElectricalSystem: typeof storedViewOptions.showElectricalSystem === "boolean"
+          ? storedViewOptions.showElectricalSystem
+          : defaultViewOptions.showElectricalSystem,
+        showFireEscape: typeof storedViewOptions.showFireEscape === "boolean"
+          ? storedViewOptions.showFireEscape
+          : defaultViewOptions.showFireEscape,
         dragSensitivity: finiteNumber(storedViewOptions.dragSensitivity, defaultViewOptions.dragSensitivity),
         ambientLightIntensity: finiteNumber(storedViewOptions.ambientLightIntensity, defaultViewOptions.ambientLightIntensity),
         roomLightIntensity: finiteNumber(storedViewOptions.roomLightIntensity, defaultViewOptions.roomLightIntensity),
@@ -355,10 +372,16 @@ function cameraPreset(id: CameraPresetId, config: RowhomeConfig): CameraPreset {
   const roofZ = config.stories * config.storyHeightFt;
 
   if (id === "top") {
-    const siteMinX = -25;
-    const siteMaxX = rowWidth + 21;
-    const siteMinY = -46;
-    const siteMaxY = config.lotDepthFt;
+    const layout = cityBlockLayout(config);
+    const urbanMargin = layout ? layout.streetWidthFt / 2 + layout.sidewalkWidthFt + layout.treeLawnWidthFt : 0;
+    const siteMinX = layout ? -urbanMargin : -25;
+    const siteMaxX = layout
+      ? layout.blockColumns * layout.blockWidthFt + (layout.blockColumns - 1) * layout.streetWidthFt + urbanMargin
+      : rowWidth + 21;
+    const siteMinY = layout ? -urbanMargin : -46;
+    const siteMaxY = layout
+      ? layout.blockRows * layout.blockDepthFt + (layout.blockRows - 1) * layout.streetWidthFt + urbanMargin
+      : config.lotDepthFt;
     const siteCenterX = (siteMinX + siteMaxX) / 2;
     const siteCenterY = (siteMinY + siteMaxY) / 2;
     const siteSpan = Math.max(siteMaxX - siteMinX, siteMaxY - siteMinY);
@@ -573,6 +596,31 @@ function applyCameraPresetPosition(presetId: CameraPresetId): void {
   setActiveCameraPreset(presetId);
 }
 
+function applyUrbanModelOverviewCamera(): void {
+  const layout = cityBlockLayout(currentConfig);
+  if (!layout) {
+    return;
+  }
+  const margin = layout.streetWidthFt / 2 + layout.sidewalkWidthFt + layout.treeLawnWidthFt;
+  const districtWidth = layout.blockColumns * layout.blockWidthFt + (layout.blockColumns - 1) * layout.streetWidthFt;
+  const districtDepth = layout.blockRows * layout.blockDepthFt + (layout.blockRows - 1) * layout.streetWidthFt;
+  const span = Math.max(districtWidth + margin * 2, districtDepth + margin * 2);
+  const buildingHeight = currentConfig.stories * currentConfig.storyHeightFt;
+  const target = new Vector3(districtWidth / 2, buildingHeight * 0.55, districtDepth / 2);
+  camera.up.set(0, 1, 0);
+  camera.fov = 42;
+  camera.updateProjectionMatrix();
+  camera.position.set(
+    districtWidth / 2 + span * 0.42,
+    buildingHeight + span * 0.26,
+    -margin - span * 0.34
+  );
+  camera.lookAt(target);
+  orbitControls?.target.copy(target);
+  orbitControls?.update();
+  syncLookAnglesFromCamera();
+}
+
 function updateSelectionLabel(): void {
   if (isolatedComponentId) {
     const isolated = model.components.find((component) => component.metadata.id === isolatedComponentId);
@@ -590,14 +638,33 @@ function shouldHideComponentInInspectionView(component: ModelComponent, viewId: 
   return false;
 }
 
+function componentHiddenBySettings(component: ModelComponent): boolean {
+  const text = `${component.metadata.id} ${component.metadata.name} ${component.metadata.category} ${component.metadata.material}`.toLowerCase();
+  if (!viewOptions.showHvacSystem && /\b(hvac|heat pump|air handler|duct|plenum|register|condenser|refrigerant|ventilation)\b/.test(text)) {
+    return true;
+  }
+  if (!viewOptions.showElectricalSystem && (
+    component.metadata.category === "electrical"
+      || /\b(electric|electrical|panel|breaker|meter|disconnect|conduit|raceway|receptacle|service mast|wire|circuit|luminaire|lighting)\b/.test(text)
+  )) {
+    return true;
+  }
+  if (!viewOptions.showFireEscape && /\b(fire[- ]?escape|egress stair|egress platform|rear egress)\b/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
 function setIsolation(componentId: string | null): void {
   isolatedComponentId = componentId;
   for (const component of model.components) {
     const isBrickTakeoffVisual = component.metadata.quantity?.kind === "standard-brick" && component.metadata.id !== "brick-takeoff-summary";
     const showForDetail = !isBrickTakeoffVisual || viewOptions.renderDetail === "detailed";
     const targetVisible = showForDetail
+      && component.object.userData.forceHiddenInUrbanScale !== true
       && componentMatchesViewMode(component, activeViewMode)
       && !shouldHideComponentInInspectionView(component, activeInspectionView)
+      && !componentHiddenBySettings(component)
       && (!componentId || component.metadata.id === componentId);
     component.object.userData.realProductTargetVisible = targetVisible;
     component.object.visible = targetVisible;
@@ -606,6 +673,7 @@ function setIsolation(componentId: string | null): void {
   structuralDemandOverlay.visible = activeViewMode === "structural-demand" && !componentId;
   structuralLegend.hidden = activeViewMode !== "structural-demand" || Boolean(componentId);
   reviewSheetOverlay.hidden = activeInspectionView !== "review-sheet";
+  houseLights.visible = viewOptions.showElectricalSystem;
   updateSelectionLabel();
 
   panel.querySelectorAll<HTMLElement>("[data-component-id]").forEach((row) => {
@@ -696,6 +764,8 @@ function performRebuild(nextConfig: RowhomeConfig): void {
   updateWalkthroughControls();
   if (activeCameraPreset) {
     applyCameraPresetPosition(activeCameraPreset);
+  } else if (activeInspectionView === "model") {
+    applyUrbanModelOverviewCamera();
   }
   setIsolation(isolatedComponentId && model.components.some((component) => component.metadata.id === isolatedComponentId) ? isolatedComponentId : null);
 }
@@ -704,6 +774,7 @@ function applyViewOptions(): void {
   sun.intensity = viewOptions.ambientLightIntensity;
   scene.remove(houseLights);
   houseLights = buildHouseLighting(model, viewOptions.roomLightIntensity);
+  houseLights.visible = viewOptions.showElectricalSystem;
   scene.add(houseLights);
   saveStoredAppOptions(currentConfig, viewOptions);
 }
@@ -846,8 +917,10 @@ async function boot(): Promise<void> {
     const cameraOffset = direction.clone().multiplyScalar(-5.8).add(side.multiplyScalar(1.7)).add(new Vector3(0, 3.4, 0));
     const focusPoint = position.clone().add(new Vector3(0, 2.0, 0));
     const desiredCameraPosition = focusPoint.clone().add(cameraOffset);
-    const clampedCameraPosition = clampFollowCameraToSameSideOfWalls(focusPoint, desiredCameraPosition, model.components);
-    camera.position.lerp(clampedCameraPosition, 0.14);
+    const nextCameraPosition = viewOptions.cameraWallCollisions
+      ? clampFollowCameraToSameSideOfWalls(focusPoint, desiredCameraPosition, model.components)
+      : desiredCameraPosition;
+    camera.position.lerp(nextCameraPosition, 0.14);
     const target = focusPoint.clone().add(direction.clone().multiplyScalar(3.2));
     camera.lookAt(target);
     orbitControls?.target.lerp(target, 0.12);
@@ -869,6 +942,7 @@ async function boot(): Promise<void> {
         camera.up.set(0, 1, 0);
         camera.fov = 55;
         camera.updateProjectionMatrix();
+        applyUrbanModelOverviewCamera();
       }
     }
     updateSelectionLabel();
@@ -1275,12 +1349,18 @@ async function boot(): Promise<void> {
     }
 
     if (target.closest("#reset-saved-options")) {
+      try {
+        localStorage.removeItem(appOptionsStorageKey);
+        localStorage.removeItem(cameraPoseStorageKey);
+      } catch {
+        // Defaults still apply for the active session if local storage is blocked.
+      }
       currentConfig = { ...defaultRowhomeConfig };
       viewOptions = { ...defaultViewOptions };
       saveStoredAppOptions(currentConfig, viewOptions);
       sun.intensity = viewOptions.ambientLightIntensity;
       rebuildModel(currentConfig);
-      setPanelTab("view");
+      setPanelTab("settings");
       return;
     }
 
@@ -1349,23 +1429,42 @@ async function boot(): Promise<void> {
       viewOptions.dragSensitivity = Number(target.value);
       saveStoredAppOptions(currentConfig, viewOptions);
     }
+    if (target.id === "camera-wall-collisions") {
+      viewOptions.cameraWallCollisions = target.value !== "disabled";
+      saveStoredAppOptions(currentConfig, viewOptions);
+    }
+    if (target.id === "show-hvac-system") {
+      viewOptions.showHvacSystem = target.value !== "disabled";
+      saveStoredAppOptions(currentConfig, viewOptions);
+      setIsolation(isolatedComponentId);
+    }
+    if (target.id === "show-electrical-system") {
+      viewOptions.showElectricalSystem = target.value !== "disabled";
+      saveStoredAppOptions(currentConfig, viewOptions);
+      setIsolation(isolatedComponentId);
+    }
+    if (target.id === "show-fire-escape") {
+      viewOptions.showFireEscape = target.value !== "disabled";
+      saveStoredAppOptions(currentConfig, viewOptions);
+      setIsolation(isolatedComponentId);
+    }
     if (target.id === "ambient-light-intensity") {
       viewOptions.ambientLightIntensity = Number(target.value);
       applyViewOptions();
       renderPanels(model, panel, currentConfig, activePanelTab, viewOptions);
-      setPanelTab("view");
+      setPanelTab("settings");
     }
     if (target.id === "room-light-intensity") {
       viewOptions.roomLightIntensity = Number(target.value);
       applyViewOptions();
       renderPanels(model, panel, currentConfig, activePanelTab, viewOptions);
-      setPanelTab("view");
+      setPanelTab("settings");
     }
     if (target.id === "render-detail") {
       viewOptions.renderDetail = target.value === "detailed" || target.value === "balanced" ? target.value : "fast";
       saveStoredAppOptions(currentConfig, viewOptions);
       rebuildModel(currentConfig);
-      setPanelTab("view");
+      setPanelTab("settings");
     }
   });
 
@@ -1457,6 +1556,7 @@ async function boot(): Promise<void> {
 
   if (window.location.hash === "#city-block" || window.location.hash === "#district") {
     rebuildModel({ ...currentConfig, urbanScale: window.location.hash === "#district" ? "district-128" : "block-32" });
+    setInspectionView("model", false);
     setPanelTab("options");
   }
 

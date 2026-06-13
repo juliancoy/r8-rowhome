@@ -1,6 +1,7 @@
-import type { ModelComponent, RowhomeConfig, RowhomeModel } from "../core/types";
+import { Matrix4 } from "three";
+import type { BuildingInstance, ModelComponent, ModelHierarchy, RowhomeConfig, RowhomeModel } from "../core/types";
 import { sources } from "../core/sources";
-import { makeCurvedFacadeComponent, makeCylinderComponent } from "../geometry/component";
+import { makeCurvedFacadeComponent, makeCylinderComponent, makeInstancedBoxComponent } from "../geometry/component";
 import { validateRowhome } from "../validation/validate";
 import { estimateFacadeMaterialCost, selectedFacadeMaterial } from "../core/facadeMaterials";
 import { selectedFacadeStyle } from "../core/facadeStyles";
@@ -24,6 +25,47 @@ import { addBrickCountSummary, addInstancedBrickWall, brickCountForWall, standar
 
 function rowhomeCount(config: RowhomeConfig): number {
   return Math.max(1, Math.min(6, Math.round(config.rowhomeCount || 1)));
+}
+
+function buildingInstanceForUnit(config: RowhomeConfig, unitIndex: number, componentIds: string[]): BuildingInstance {
+  return {
+    id: `detailed-house-${unitIndex + 1}`,
+    block: 1,
+    row: 1,
+    position: unitIndex + 1,
+    xFt: unitIndex * config.buildingWidthFt,
+    yFt: 0,
+    widthFt: config.buildingWidthFt,
+    depthFt: config.buildingDepthFt,
+    flipped: false,
+    componentIds
+  };
+}
+
+function modelHierarchyForDetailedBuildings(config: RowhomeConfig, components: ModelComponent[], count: number): ModelHierarchy {
+  if (count === 1) {
+    return {
+      mode: "single-building",
+      buildingInstances: [buildingInstanceForUnit(config, 0, components.map((component) => component.metadata.id))],
+      hiddenDetailedComponentIds: [],
+      notes: ["Single-building mode owns all generated components as one complete detailed house."]
+    };
+  }
+  return {
+    mode: "row-assembly",
+    buildingInstances: Array.from({ length: count }, (_, index) => {
+      const prefix = `unit-${index + 1}-`;
+      const sharedIds = components
+        .filter((component) => !component.metadata.id.startsWith("unit-"))
+        .map((component) => component.metadata.id);
+      const unitIds = components
+        .filter((component) => component.metadata.id.startsWith(prefix))
+        .map((component) => component.metadata.id);
+      return buildingInstanceForUnit(config, index, [...sharedIds, ...unitIds]);
+    }),
+    hiddenDetailedComponentIds: [],
+    notes: ["Row-assembly mode keeps each detailed house instance explicit while sharing row-level site and party-wall components."]
+  };
 }
 
 function prefixUnitComponent(component: ModelComponent, unitIndex: number, xOffset: number): ModelComponent {
@@ -69,7 +111,10 @@ function isUnitComponentReplacedByRowAssembly(component: ModelComponent): boolea
     "party-wall-left-standard-bricks",
     "party-wall-right-standard-bricks",
     "basement-party-wall-left",
-    "basement-party-wall-right"
+    "basement-party-wall-right",
+    "house-scale-person-legs",
+    "house-scale-person-torsos",
+    "house-scale-person-heads"
   ].includes(component.metadata.id);
 }
 
@@ -263,6 +308,60 @@ function addRowSiteComponents(components: ModelComponent[], config: RowhomeConfi
   );
 }
 
+function houseScalePersonTransforms(config: RowhomeConfig, xOffset = 0): {
+  legs: Matrix4[];
+  torsos: Matrix4[];
+  heads: Matrix4[];
+} {
+  const x = xOffset + config.buildingWidthFt / 2 + 2.1;
+  const y = -6.0;
+  const transform = (px: number, planY: number, z: number) => new Matrix4().makeTranslation(px, z, planY);
+  return {
+    legs: [
+      transform(x - 0.18, y, 1.15),
+      transform(x + 0.18, y, 1.15)
+    ],
+    torsos: [transform(x, y, 3.1)],
+    heads: [transform(x, y, 4.95)]
+  };
+}
+
+function addHouseScalePeople(components: ModelComponent[], config: RowhomeConfig, count = 1): void {
+  const notes = [
+    "Instanced schematic dummy person tied to the house model for human scale at the stoop and sidewalk.",
+    "Zero-cost, non-printable context only; the animated walkthrough person remains a separate browser overlay."
+  ];
+  const transforms = Array.from({ length: count }, (_, unit) => houseScalePersonTransforms(config, unit * config.buildingWidthFt));
+  const makeMeta = (id: string, name: string) => metadata(id, name, "site", "instanced schematic dummy person scale reference", sources.plan, 0, false, notes);
+  components.push(makeInstancedBoxComponent(
+    makeMeta("house-scale-person-legs", "House instanced scale-person legs"),
+    "#25313a",
+    0.18,
+    0.18,
+    2.2,
+    transforms.flatMap((item) => item.legs),
+    { cast: true, receive: true }
+  ));
+  components.push(makeInstancedBoxComponent(
+    makeMeta("house-scale-person-torsos", "House instanced scale-person torsos"),
+    "#2f6f91",
+    0.7,
+    0.32,
+    1.65,
+    transforms.flatMap((item) => item.torsos),
+    { cast: true, receive: true }
+  ));
+  components.push(makeInstancedBoxComponent(
+    makeMeta("house-scale-person-heads", "House instanced scale-person heads"),
+    "#b98660",
+    0.5,
+    0.5,
+    0.5,
+    transforms.flatMap((item) => item.heads),
+    { cast: true, receive: true }
+  ));
+}
+
 function partyWallCenterX(boundaryIndex: number, config: RowhomeConfig, count: number): number {
   if (boundaryIndex === 0) return 0.225;
   if (boundaryIndex === count) return config.buildingWidthFt * count - 0.225;
@@ -338,6 +437,7 @@ function buildRowAssembly(config: RowhomeConfig, count: number): RowhomeModel {
   const renderIndividualBricks = config.brickDetailMode === "individual-bricks";
   const components: ModelComponent[] = [];
   addRowSiteComponents(components, config, count);
+  addHouseScalePeople(components, config, count);
 
   let unitFrontRearBrickCount = 0;
   for (let unit = 0; unit < count; unit += 1) {
@@ -369,6 +469,7 @@ function buildRowAssembly(config: RowhomeConfig, count: number): RowhomeModel {
     units: "feet",
     components,
     structural: buildStructuralModel(config),
+    hierarchy: modelHierarchyForDetailedBuildings(config, components, count),
     validation: []
   };
   model.validation = validateRowhome(config, model);
@@ -1370,6 +1471,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
     { x: config.lotWidthFt / 2, y: config.lotDepthFt / 2 - 5, z: -0.08 }
   );
   addStreetFrontage(components, config.buildingWidthFt);
+  addHouseScalePeople(components, config);
   addBasement(components, config);
 
   const constructionSystem = selectedConstructionSystem(config);
@@ -2064,6 +2166,7 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
     units: "feet",
     components,
     structural: buildStructuralModel(config),
+    hierarchy: modelHierarchyForDetailedBuildings(config, components, 1),
     validation: []
   };
   model.validation = validateRowhome(config, model);
@@ -2073,6 +2176,9 @@ function generateSingleRowhome(config: RowhomeConfig): RowhomeModel {
 export function generateRowhome(config: RowhomeConfig): RowhomeModel {
   const count = rowhomeCount(config);
   const model = count === 1 ? generateSingleRowhome({ ...config, rowhomeCount: 1 }) : buildRowAssembly(config, count);
-  addCityBlockMassing(model.components, config);
+  const urbanHierarchy = addCityBlockMassing(model.components, config);
+  if (urbanHierarchy) {
+    model.hierarchy = urbanHierarchy;
+  }
   return model;
 }

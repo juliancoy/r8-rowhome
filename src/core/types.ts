@@ -36,6 +36,14 @@ export interface ComponentMetadata {
   notes?: string[];
   realProductModel?: RealProductModel;
   quantity?: ComponentQuantity;
+  ownership?: ComponentOwnership;
+}
+
+export interface ComponentOwnership {
+  scope: "detailed-building" | "urban-building-instances" | "urban-context";
+  role: string;
+  buildingInstanceIds?: string[];
+  replicatedFromComponentIds?: string[];
 }
 
 export interface ComponentQuantity {
@@ -239,7 +247,28 @@ export interface RowhomeModel {
   units: "feet";
   components: ModelComponent[];
   structural?: StructuralModel;
+  hierarchy?: ModelHierarchy;
   validation: ValidationMessage[];
+}
+
+export interface BuildingInstance {
+  id: string;
+  block: number;
+  row: number;
+  position: number;
+  xFt: number;
+  yFt: number;
+  widthFt: number;
+  depthFt: number;
+  flipped: boolean;
+  componentIds: string[];
+}
+
+export interface ModelHierarchy {
+  mode: "single-building" | "row-assembly" | "urban-block";
+  buildingInstances: BuildingInstance[];
+  hiddenDetailedComponentIds: string[];
+  notes: string[];
 }
 
 export interface RowhomeConfig {
@@ -277,6 +306,10 @@ export interface BomLine {
 export interface ViewOptions {
   invertDragHorizontal: boolean;
   invertDragVertical: boolean;
+  cameraWallCollisions: boolean;
+  showHvacSystem: boolean;
+  showElectricalSystem: boolean;
+  showFireEscape: boolean;
   dragSensitivity: number;
   ambientLightIntensity: number;
   roomLightIntensity: number;

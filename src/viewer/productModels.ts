@@ -105,6 +105,9 @@ function intendedProductVisibility(
   activeViewMode: ViewMode,
   isolatedComponentId: string | null
 ): boolean {
+  if (component.object.userData.forceHiddenInUrbanScale === true) {
+    return false;
+  }
   const storedTarget = component.object.userData.realProductTargetVisible;
   if (typeof storedTarget === "boolean") {
     return storedTarget;
@@ -127,7 +130,7 @@ export function attachRealProductModels(
 
   for (const component of components) {
     const product = component.metadata.realProductModel;
-    if (!product) {
+    if (!product || component.object.userData.forceHiddenInUrbanScale === true) {
       continue;
     }
 

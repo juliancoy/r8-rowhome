@@ -45,6 +45,33 @@ describe("rowhome generator", () => {
     expect(model.components.filter((component) => component.metadata.id.startsWith("street-light-head-")).length).toBe(2);
     expect(model.components.filter((component) => component.metadata.id.startsWith("front-crosswalk-stripe-")).length).toBe(6);
     expect(model.components.filter((component) => component.metadata.id.startsWith("side-crosswalk-stripe-")).length).toBe(5);
+    expect(model.components.find((component) => component.metadata.id === "house-scale-person-torsos")?.object).toBeInstanceOf(InstancedMesh);
+    expect(model.hierarchy?.mode).toBe("single-building");
+    expect(model.hierarchy?.buildingInstances).toHaveLength(1);
+    expect(model.hierarchy?.buildingInstances[0].componentIds).toContain("front-facade");
+  });
+
+  it("instances a dummy scale person with the house and row assembly", () => {
+    const single = generateRowhome(defaultRowhomeConfig);
+    const singleTorso = single.components.find((component) => component.metadata.id === "house-scale-person-torsos");
+    const singleHead = single.components.find((component) => component.metadata.id === "house-scale-person-heads");
+    const singleLegs = single.components.find((component) => component.metadata.id === "house-scale-person-legs");
+
+    expect(singleTorso?.object).toBeInstanceOf(InstancedMesh);
+    expect((singleTorso?.object as InstancedMesh).count).toBe(1);
+    expect((singleHead?.object as InstancedMesh).count).toBe(1);
+    expect((singleLegs?.object as InstancedMesh).count).toBe(2);
+    expect(singleTorso?.metadata.estimatedCostUsd).toBe(0);
+    expect(singleTorso?.metadata.printable).toBe(false);
+
+    const row = generateRowhome({ ...defaultRowhomeConfig, rowhomeCount: 3 });
+    const rowTorso = row.components.find((component) => component.metadata.id === "house-scale-person-torsos");
+    const prefixedPeople = row.components.filter((component) => component.metadata.id.includes("house-scale-person") && component.metadata.id.startsWith("unit-"));
+
+    expect((rowTorso?.object as InstancedMesh).count).toBe(3);
+    expect(prefixedPeople).toHaveLength(0);
+    expect(row.hierarchy?.mode).toBe("row-assembly");
+    expect(row.hierarchy?.buildingInstances).toHaveLength(3);
   });
 
   it("keeps the public sidewalks outside the house footprint and brings the front walk to the lot line", () => {
