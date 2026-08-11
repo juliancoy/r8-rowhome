@@ -1,23 +1,31 @@
 import {
+  AdditiveBlending,
   BoxGeometry,
   BufferGeometry,
   Float32BufferAttribute,
   Color,
   CylinderGeometry,
   DataTexture,
+  DoubleSide,
   Group,
   InstancedMesh,
   Matrix4,
+  Material,
   Mesh,
+  MeshBasicMaterial,
+  MeshPhongMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
+  MeshToonMaterial,
+  MeshNormalMaterial,
   Object3D,
   RepeatWrapping,
   RGBAFormat,
   SRGBColorSpace,
+  ShaderMaterial,
   type Texture
 } from "three";
-import type { ComponentMetadata, ModelComponent } from "../core/types";
+import type { ComponentMetadata, ModelComponent, RenderMaterialStyle } from "../core/types";
 
 type MaterialFamily =
   | "glass"
@@ -40,6 +48,33 @@ type SurfaceTextureSet = {
 };
 
 const surfaceTextureCache = new Map<TexturedMaterialFamily, SurfaceTextureSet>();
+type AppearanceOption = { value: RenderMaterialStyle; label: string };
+type RenderStyledObject = Object3D & {
+  isMesh?: boolean;
+  isInstancedMesh?: boolean;
+  material?: Material | Material[];
+  userData: Object3D["userData"] & {
+    originalRenderMaterials?: Material[];
+    originalRenderMaterialsWereArray?: boolean;
+    renderMaterialStyle?: RenderMaterialStyle;
+  };
+};
+
+export const renderMaterialOptions: AppearanceOption[] = [
+  { value: "standard", label: "Standard" },
+  { value: "brushed-metal", label: "Brushed metal" },
+  { value: "polished-metal", label: "Polished metal" },
+  { value: "iridescent", label: "Iridescent metal" },
+  { value: "pearl", label: "Pearlescent" },
+  { value: "glass", label: "Tinted glass" },
+  { value: "emissive", label: "Neon glow" },
+  { value: "hologram", label: "Hologram" },
+  { value: "xray", label: "X-ray" },
+  { value: "phong", label: "Phong" },
+  { value: "toon", label: "Toon" },
+  { value: "normal", label: "Normals" },
+  { value: "wireframe", label: "Wireframe" }
+];
 const proceduralBrickTextureModules = {
   horizontal: 4,
   vertical: 8
@@ -583,6 +618,207 @@ export function modelGroup(components: ModelComponent[]): Group {
     group.add(component.object);
   }
   return group;
+}
+
+function isRenderableMaterialTarget(object: Object3D): object is RenderStyledObject {
+  const candidate = object as RenderStyledObject;
+  return Boolean((candidate.isMesh || candidate.isInstancedMesh) && candidate.material);
+}
+
+function overrideMaterial(style: RenderMaterialStyle, color: Color): Material {
+  const common = { color, side: DoubleSide };
+  if (style === "brushed-metal") {
+    return new MeshPhysicalMaterial({
+      ...common,
+      metalness: 0.92,
+      roughness: 0.3,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.22,
+      anisotropy: 0.7
+    });
+  }
+  if (style === "polished-metal") {
+    return new MeshPhysicalMaterial({
+      ...common,
+      metalness: 1,
+      roughness: 0.06,
+      clearcoat: 1,
+      clearcoatRoughness: 0.04
+    });
+  }
+  if (style === "iridescent") {
+    return new MeshPhysicalMaterial({
+      ...common,
+      metalness: 0.58,
+      roughness: 0.18,
+      clearcoat: 1,
+      iridescence: 1,
+      iridescenceIOR: 1.6,
+      iridescenceThicknessRange: [120, 900]
+    });
+  }
+  if (style === "pearl") {
+    return new MeshPhysicalMaterial({
+      ...common,
+      metalness: 0.05,
+      roughness: 0.24,
+      clearcoat: 1,
+      sheen: 1,
+      sheenColor: color.clone().offsetHSL(0.08, 0.1, 0.2),
+      iridescence: 0.4,
+      iridescenceThicknessRange: [100, 420]
+    });
+  }
+  if (style === "glass") {
+    return new MeshPhysicalMaterial({
+      ...common,
+      metalness: 0,
+      roughness: 0.08,
+      transmission: 0.9,
+      thickness: 0.8,
+      ior: 1.46,
+      transparent: true,
+      opacity: 0.68,
+      depthWrite: false
+    });
+  }
+  if (style === "emissive") {
+    return new MeshStandardMaterial({
+      ...common,
+      roughness: 0.3,
+      emissive: color,
+      emissiveIntensity: 1.8,
+      toneMapped: false
+    });
+  }
+  if (style === "xray") {
+    return new MeshBasicMaterial({
+      ...common,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+      blending: AdditiveBlending
+    });
+  }
+  if (style === "hologram") {
+    return new ShaderMaterial({
+      side: DoubleSide,
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+      uniforms: {
+        baseColor: { value: color },
+        time: { value: 0 }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vWorldPosition;
+        void main() {
+          vNormal = normalize(mat3(modelMatrix) * normal);
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 baseColor;
+        uniform float time;
+        varying vec3 vNormal;
+        varying vec3 vWorldPosition;
+        void main() {
+          vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+          float fresnel = pow(1.0 - abs(dot(normalize(vNormal), viewDirection)), 2.2);
+          float scan = 0.5 + 0.5 * sin(vWorldPosition.z * 420.0 - time * 5.0);
+          vec3 rainbow = 0.5 + 0.5 * cos(
+            6.28318 * (fresnel + vec3(0.0, 0.33, 0.67) + time * 0.04)
+          );
+          vec3 glow = mix(baseColor, rainbow, 0.62) * (0.55 + fresnel + scan * 0.22);
+          gl_FragColor = vec4(glow, 0.38 + fresnel * 0.52);
+        }
+      `
+    });
+  }
+  if (style === "phong") {
+    return new MeshPhongMaterial({ ...common, shininess: 80 });
+  }
+  if (style === "toon") {
+    return new MeshToonMaterial(common);
+  }
+  if (style === "normal") {
+    return new MeshNormalMaterial({ side: 2 });
+  }
+  if (style === "wireframe") {
+    return new MeshBasicMaterial({ ...common, wireframe: true });
+  }
+  return new MeshStandardMaterial({ ...common, roughness: 0.55, metalness: 0.02 });
+}
+
+export function updateRenderMaterialAnimations(root: Object3D, nowMs: number): void {
+  root.traverse((object) => {
+    if (!isRenderableMaterialTarget(object) || !object.material) {
+      return;
+    }
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) {
+      const shaderMaterial = material as ShaderMaterial & {
+        uniforms?: { time?: { value: number } };
+      };
+      if (shaderMaterial.uniforms?.time) {
+        shaderMaterial.uniforms.time.value = nowMs / 1000;
+      }
+    }
+  });
+}
+
+function materialBaseColor(material: Material): Color {
+  const source = material as Material & { color?: Color };
+  return source.color ? source.color.clone() : new Color("#c7b28a");
+}
+
+function disposeOverrideMaterials(object: RenderStyledObject): void {
+  if (object.userData.renderMaterialStyle === "standard" || !object.material) {
+    return;
+  }
+  const currentMaterials = Array.isArray(object.material) ? object.material : [object.material];
+  for (const material of currentMaterials) {
+    if (!object.userData.originalRenderMaterials?.includes(material)) {
+      material.dispose();
+    }
+  }
+}
+
+export function applyRenderMaterialStyle(root: Object3D, style: RenderMaterialStyle): void {
+  root.traverse((object) => {
+    if (!isRenderableMaterialTarget(object)) {
+      return;
+    }
+    const materialProperty = object.material;
+    const currentMaterials: Material[] = Array.isArray(materialProperty)
+      ? materialProperty.filter((material): material is Material => Boolean(material))
+      : materialProperty ? [materialProperty] : [];
+    if (currentMaterials.length === 0) {
+      return;
+    }
+    if (!object.userData.originalRenderMaterials) {
+      object.userData.originalRenderMaterials = currentMaterials;
+      object.userData.originalRenderMaterialsWereArray = Array.isArray(object.material);
+    }
+    if (style === "standard") {
+      disposeOverrideMaterials(object);
+      const originals = object.userData.originalRenderMaterials;
+      if (!originals) {
+        return;
+      }
+      object.material = object.userData.originalRenderMaterialsWereArray ? [...originals] : originals[0]!;
+      object.userData.renderMaterialStyle = "standard";
+      return;
+    }
+    disposeOverrideMaterials(object);
+    const originals = object.userData.originalRenderMaterials ?? currentMaterials;
+    const overrides = originals.map((material) => overrideMaterial(style, materialBaseColor(material)));
+    object.material = object.userData.originalRenderMaterialsWereArray ? overrides : overrides[0]!;
+    object.userData.renderMaterialStyle = style;
+  });
 }
 
 export function cloneWorldObject(component: ModelComponent): Object3D {

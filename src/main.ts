@@ -20,7 +20,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { defaultRowhomeConfig } from "./core/config";
 import { generateRowhome } from "./generators/rowhome";
 import { cityBlockLayout } from "./generators/cityBlock";
-import { modelGroup } from "./geometry/component";
+import { applyRenderMaterialStyle, modelGroup, updateRenderMaterialAnimations } from "./geometry/component";
 import { exportComponentStl, exportModelStl, downloadTextFile } from "./export/stl";
 import { exportModelMetadataJson } from "./export/json";
 import { renderPanels, type PanelTab } from "./ui/panels";
@@ -54,7 +54,7 @@ import {
   type OccupantRouteId,
   type OccupantWalkthroughState
 } from "./viewer/occupantWalkthrough";
-import type { BrickDetailMode, ModelComponent, RowhomeConfig, RowhomeModel, StairImplementation, StructuralSupportScheme, ViewOptions } from "./core/types";
+import type { BrickDetailMode, ModelComponent, RenderMaterialStyle, RowhomeConfig, RowhomeModel, StairImplementation, StructuralSupportScheme, ViewOptions } from "./core/types";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) {
@@ -216,7 +216,8 @@ const defaultViewOptions: ViewOptions = {
   dragSensitivity: 0.003,
   ambientLightIntensity: 3.6,
   roomLightIntensity: 2,
-  renderDetail: "balanced"
+  renderDetail: "balanced",
+  renderMaterial: "standard"
 };
 const appOptionsStorageKey = "r8-rowhome.options.v2";
 
@@ -227,6 +228,26 @@ interface StoredAppOptions {
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function parseRenderMaterialStyle(value: unknown): RenderMaterialStyle {
+  switch (value) {
+    case "brushed-metal":
+    case "polished-metal":
+    case "iridescent":
+    case "pearl":
+    case "glass":
+    case "emissive":
+    case "hologram":
+    case "xray":
+    case "phong":
+    case "toon":
+    case "normal":
+    case "wireframe":
+      return value;
+    default:
+      return "standard";
+  }
 }
 
 function loadStoredAppOptions(): StoredAppOptions {
@@ -270,7 +291,8 @@ function loadStoredAppOptions(): StoredAppOptions {
         roomLightIntensity: finiteNumber(storedViewOptions.roomLightIntensity, defaultViewOptions.roomLightIntensity),
         renderDetail: storedViewOptions.renderDetail === "balanced" || storedViewOptions.renderDetail === "detailed"
           ? storedViewOptions.renderDetail
-          : defaultViewOptions.renderDetail
+          : defaultViewOptions.renderDetail,
+        renderMaterial: parseRenderMaterialStyle(storedViewOptions.renderMaterial)
       }
     };
   } catch {
@@ -520,7 +542,15 @@ let doorAssemblies: DoorAssembly[] = createDoorAssemblies(model.components);
 let windowAssemblies: WindowAssembly[] = createWindowAssemblies(model.components);
 let navigationBlockers: NavigationBounds[] = navigationBoundsForComponents(model.components);
 scene.add(group);
-attachRealProductModels(group, model.components, viewOptions.renderDetail !== "fast", activeViewMode, isolatedComponentId);
+attachRealProductModels(
+  group,
+  model.components,
+  viewOptions.renderDetail !== "fast",
+  activeViewMode,
+  isolatedComponentId,
+  (productModel) => applyRenderMaterialStyle(productModel, viewOptions.renderMaterial)
+);
+applyRenderMaterialStyle(group, viewOptions.renderMaterial);
 let houseLights: Group = buildHouseLighting(model, viewOptions.roomLightIntensity);
 scene.add(houseLights);
 let structuralDemandOverlay: Group = buildStructuralDemandOverlay(model.structural);
@@ -755,7 +785,15 @@ function performRebuild(nextConfig: RowhomeConfig): void {
   windowAssemblies = createWindowAssemblies(model.components);
   navigationBlockers = navigationBoundsForComponents(model.components);
   scene.add(group);
-  attachRealProductModels(group, model.components, viewOptions.renderDetail !== "fast", activeViewMode, isolatedComponentId);
+  attachRealProductModels(
+    group,
+    model.components,
+    viewOptions.renderDetail !== "fast",
+    activeViewMode,
+    isolatedComponentId,
+    (productModel) => applyRenderMaterialStyle(productModel, viewOptions.renderMaterial)
+  );
+  applyRenderMaterialStyle(group, viewOptions.renderMaterial);
   houseLights = buildHouseLighting(model, viewOptions.roomLightIntensity);
   scene.add(houseLights);
   structuralDemandOverlay = buildStructuralDemandOverlay(model.structural);
@@ -772,6 +810,7 @@ function performRebuild(nextConfig: RowhomeConfig): void {
 
 function applyViewOptions(): void {
   sun.intensity = viewOptions.ambientLightIntensity;
+  applyRenderMaterialStyle(group, viewOptions.renderMaterial);
   scene.remove(houseLights);
   houseLights = buildHouseLighting(model, viewOptions.roomLightIntensity);
   houseLights.visible = viewOptions.showElectricalSystem;
@@ -1079,6 +1118,7 @@ async function boot(): Promise<void> {
     updateWalkthroughControls(occupantSample.progress);
     orbitControls?.update();
     persistCameraPose(nowMs);
+    updateRenderMaterialAnimations(group, nowMs);
     if (activeInspectionView === "review-sheet") {
       const renderStartMs = performance.now();
       renderReviewSheet(currentRenderer, canvas.clientWidth, canvas.clientHeight);
@@ -1464,6 +1504,12 @@ async function boot(): Promise<void> {
       viewOptions.renderDetail = target.value === "detailed" || target.value === "balanced" ? target.value : "fast";
       saveStoredAppOptions(currentConfig, viewOptions);
       rebuildModel(currentConfig);
+      setPanelTab("settings");
+    }
+    if (target.id === "render-material") {
+      viewOptions.renderMaterial = parseRenderMaterialStyle(target.value);
+      applyViewOptions();
+      renderPanels(model, panel, currentConfig, activePanelTab, viewOptions);
       setPanelTab("settings");
     }
   });

@@ -122,7 +122,8 @@ export function attachRealProductModels(
   components: ModelComponent[],
   enabled = true,
   activeViewMode: ViewMode = "all",
-  isolatedComponentId: string | null = null
+  isolatedComponentId: string | null = null,
+  onModelAttached?: (model: Object3D) => void
 ): void {
   if (!enabled) {
     return;
@@ -168,6 +169,7 @@ export function attachRealProductModels(
           }
         }
         group.add(model);
+        onModelAttached?.(model);
         syncRealProductModelVisibility(group, components, activeViewMode, isolatedComponentId);
       })
       .catch((error) => {

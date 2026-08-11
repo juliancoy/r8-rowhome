@@ -4,6 +4,7 @@ import type { RowhomeConfig, ViewOptions } from "../core/types";
 import { estimateFacadeMaterialCost, facadeMaterialOptions } from "../core/facadeMaterials";
 import { facadeStyleOptions, selectedFacadeStyle } from "../core/facadeStyles";
 import { constructionSystemOptions, selectedConstructionSystem } from "../core/constructionSystems";
+import { renderMaterialOptions } from "../geometry/component";
 import { buildInvestorDashboard, type InvestorDashboardReport } from "../reports/investorDashboard";
 import { sourceDocuments, type SourceDocumentEntry } from "../generated/documentIndex";
 import { viewLayerOptions } from "../viewer/layers";
@@ -477,6 +478,15 @@ export function renderPanels(model: RowhomeModel, root: HTMLElement, config: Row
           <span>Room lights</span>
           <input id="room-light-intensity" type="range" min="0" max="4" step="0.05" value="${viewOptions.roomLightIntensity}">
           <small>${viewOptions.roomLightIntensity.toFixed(2)}x overhead and lamp intensity</small>
+        </label>
+        <label class="field">
+          <span>Render material</span>
+          <select id="render-material">
+            ${renderMaterialOptions.map((option) => `
+              <option value="${option.value}" ${viewOptions.renderMaterial === option.value ? "selected" : ""}>${option.label}</option>
+            `).join("")}
+          </select>
+          <small>Uses the same full appearance menu as ../agnuquena, applied across the rowhome viewer.</small>
         </label>
         <label class="field">
           <span>Visual detail</span>

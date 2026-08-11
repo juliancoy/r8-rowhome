@@ -17,6 +17,20 @@ export type StructuralSupportScheme = "masonry-bearing" | "steel-post-beam";
 export type BrickDetailMode = "solid-textured" | "individual-bricks";
 export type ConstructionSystem = "masonry-wood" | "steel-concrete";
 export type UrbanScale = "single" | "block-32" | "district-128";
+export type RenderMaterialStyle =
+  | "standard"
+  | "brushed-metal"
+  | "polished-metal"
+  | "iridescent"
+  | "pearl"
+  | "glass"
+  | "emissive"
+  | "hologram"
+  | "xray"
+  | "phong"
+  | "toon"
+  | "normal"
+  | "wireframe";
 
 export interface ValidationMessage {
   severity: ValidationSeverity;
@@ -314,4 +328,5 @@ export interface ViewOptions {
   ambientLightIntensity: number;
   roomLightIntensity: number;
   renderDetail: "fast" | "balanced" | "detailed";
+  renderMaterial: RenderMaterialStyle;
 }
